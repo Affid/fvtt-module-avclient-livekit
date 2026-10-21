@@ -255,16 +255,17 @@ export default function registerModuleSettings(): void {
     },
   });
 
-  // Noise gate (client-side, applied as a track processor)
-  game.settings?.register(MODULE_NAME, "audioNoiseGate", {
-    name: "LIVEKITAVCLIENT.audioNoiseGate",
-    hint: "LIVEKITAVCLIENT.audioNoiseGateHint",
+  // Input sensitivity: the voice activity gate (client-side, in the track
+  // processor) used in Voice Activity mode. Its threshold follows the
+  // background noise, or is set by hand. Both apply to the running gate.
+  game.settings?.register(MODULE_NAME, "audioAutoSensitivity", {
+    name: "LIVEKITAVCLIENT.audioAutoSensitivity",
     scope: "client",
     config: false,
-    default: false,
-    type: new foundry.data.fields.BooleanField({ initial: false }),
+    default: true,
+    type: new foundry.data.fields.BooleanField({ initial: true }),
     onChange: () => {
-      game.webrtc?.client._liveKitClient.scheduleAudioProcessingRefresh();
+      game.webrtc?.client._liveKitClient.applyVoiceGateSettings();
     },
   });
 
@@ -283,7 +284,7 @@ export default function registerModuleSettings(): void {
       initial: -50,
     }),
     onChange: () => {
-      game.webrtc?.client._liveKitClient.scheduleAudioProcessingRefresh();
+      game.webrtc?.client._liveKitClient.applyVoiceGateSettings();
     },
   });
 

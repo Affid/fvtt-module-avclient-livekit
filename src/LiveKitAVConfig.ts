@@ -16,6 +16,7 @@ import {
   selectInput,
   setPushToTalkKey,
   settingRow,
+  slider,
   switchInput,
   textInput,
 } from "./ui/controls";
@@ -180,6 +181,8 @@ export default class LiveKitAVConfig
     // @ts-expect-error - calling the protected method of the base application
     await applicationBase()._onRender.call(this, context, options);
     this.meter?.stop();
+    // Rendering shows the saved settings, so stop trying out unsaved ones
+    this.liveKitClient?.previewVoiceGate();
 
     const root = this.element.querySelector("[data-livekit-settings]");
     if (!(root instanceof HTMLElement) || !this.data) {
@@ -308,6 +311,7 @@ export default class LiveKitAVConfig
   ): void {
     this.meter?.stop();
     this.meter = undefined;
+    this.liveKitClient?.previewVoiceGate();
     super._onClose(options);
   }
 
@@ -389,7 +393,7 @@ export default class LiveKitAVConfig
       | "audioEchoCancellation"
       | "audioNoiseSuppression"
       | "audioMusicMode"
-      | "audioNoiseGate"
+      | "audioAutoSensitivity"
       | "discordStyleUI"
       | "displayConnectionQuality"
       | "useExternalAV"
@@ -438,9 +442,6 @@ export default class LiveKitAVConfig
     if (!data || !client) {
       return [];
     }
-    const krispActive =
-      this.liveKitClient?.getAudioProcessingConfig().model === "krisp";
-
     // Devices
     const deviceSelect = (
       key: "audioSrc" | "audioSink",
@@ -484,20 +485,74 @@ export default class LiveKitAVConfig
             }),
           }),
         pushToTalkKey,
-        settingRow({
+        slider({
+          name: "core.rtcClientSettings.voice.pttDelay",
           label: localize("pushToTalkDelay"),
-          hint: localize("pushToTalkDelayHint"),
-          inline: true,
-          control: textInput({
-            type: "number",
-            name: "core.rtcClientSettings.voice.pttDelay",
-            value: String(client.voice.pttDelay),
-            attrs: { min: "0", step: "10" },
-          }),
+          min: 0,
+          max: 2000,
+          step: 10,
+          value: client.voice.pttDelay,
+          format: (delay) => `${delay.toString()} ms`,
+        }),
+        el("p", {
+          className: "livekit-setting-hint livekit-slider-hint",
+          text: localize("pushToTalkDelayHint"),
         }),
       ],
     });
-    pushToTalkOptions.hidden = client.voice.mode !== "ptt";
+
+    // Input sensitivity, for Voice Activity only. Changes are tried out on
+    // the microphone right away, until saved or undone.
+    const gateSettings = this.liveKitClient?.getVoiceGateSettings() ?? {
+      auto: true,
+      threshold: -50,
+    };
+    const caption = el("span", {
+      className: "livekit-meter-caption",
+      text: `${gateSettings.threshold.toString()} dB`,
+    });
+    const sensitivityHint = el("p", { className: "livekit-setting-hint" });
+    const showSensitivity = () => {
+      this.meter?.setAuto(gateSettings.auto);
+      sensitivityHint.replaceChildren(
+        localize(
+          gateSettings.auto
+            ? "inputSensitivityAutoHint"
+            : "inputSensitivityHint",
+        ),
+        gateSettings.auto ? "" : caption,
+      );
+    };
+    const preview = () => {
+      this.liveKitClient?.previewVoiceGate({ ...gateSettings });
+      showSensitivity();
+    };
+    this.meter = new InputLevelMeter({
+      name: `${MODULE_NAME}.audioNoiseGateThreshold`,
+      settings: gateSettings,
+      onInput: (threshold) => {
+        caption.textContent = `${threshold.toString()} dB`;
+        gateSettings.threshold = threshold;
+        preview();
+      },
+    });
+    const autoSwitch = this.moduleSwitch("audioAutoSensitivity");
+    autoSwitch.querySelector("input")?.addEventListener("change", (event) => {
+      gateSettings.auto = (event.currentTarget as HTMLInputElement).checked;
+      preview();
+    });
+    const sensitivity = this.group(
+      localize("inputSensitivity"),
+      autoSwitch,
+      this.meter.element,
+      sensitivityHint,
+    );
+    showSensitivity();
+
+    const showModeOptions = (mode: string) => {
+      pushToTalkOptions.hidden = mode !== "ptt";
+      sensitivity.hidden = mode !== "always";
+    };
     const inputMode = radioGroup({
       name: "core.rtcClientSettings.voice.mode",
       label: localize("inputMode"),
@@ -506,26 +561,9 @@ export default class LiveKitAVConfig
         { value: "always", label: localize("inputModeVoiceActivity") },
         { value: "ptt", label: localize("inputModePushToTalk") },
       ],
-      onChange: (value) => {
-        pushToTalkOptions.hidden = value !== "ptt";
-      },
+      onChange: showModeOptions,
     });
-
-    // Input sensitivity
-    const threshold =
-      game.settings?.get(MODULE_NAME, "audioNoiseGateThreshold") ?? -50;
-    const caption = el("span", {
-      className: "livekit-meter-caption",
-      text: `${threshold.toString()} dB`,
-    });
-    this.meter = new InputLevelMeter({
-      name: `${MODULE_NAME}.audioNoiseGateThreshold`,
-      threshold,
-      disabled: krispActive,
-      onInput: (value) => {
-        caption.textContent = `${value.toString()} dB`;
-      },
-    });
+    showModeOptions(client.voice.mode);
 
     return [
       this.group(
@@ -535,20 +573,7 @@ export default class LiveKitAVConfig
           deviceSelect("audioSink", data.audioSinks, false),
       ),
       this.group(localize("inputMode"), inputMode, pushToTalkOptions),
-      this.group(
-        localize("inputSensitivity"),
-        this.moduleSwitch("audioNoiseGate", {
-          label: localize("inputSensitivityEnable"),
-          disabled: krispActive,
-          hint: krispActive ? localize("krispRefinementDisabled") : undefined,
-        }),
-        this.meter.element,
-        el("p", {
-          className: "livekit-setting-hint",
-          text: localize("inputSensitivityHint"),
-          children: [caption],
-        }),
-      ),
+      sensitivity,
     ];
   }
 
@@ -558,7 +583,6 @@ export default class LiveKitAVConfig
       return [];
     }
     const options = client.getNoiseModelOptions();
-    const krispActive = client.getAudioProcessingConfig().model === "krisp";
     const modelActive = !!client.getAudioProcessingConfig().model;
 
     return [
@@ -575,10 +599,7 @@ export default class LiveKitAVConfig
           }),
         }),
         this.moduleSwitch("audioEchoCancellation"),
-        this.moduleSwitch("audioAutoGainControl", {
-          disabled: krispActive,
-          hint: krispActive ? localize("krispRefinementDisabled") : undefined,
-        }),
+        this.moduleSwitch("audioAutoGainControl"),
         this.moduleSwitch("audioNoiseSuppression", {
           hint: modelActive
             ? localize("audioNoiseSuppressionModelActive")

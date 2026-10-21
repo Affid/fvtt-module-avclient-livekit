@@ -120,8 +120,8 @@ declare global {
     "avclient-livekit.audioNoiseSuppression": foundry.data.fields.BooleanField<{
       initial: true;
     }>;
-    "avclient-livekit.audioNoiseGate": foundry.data.fields.BooleanField<{
-      initial: false;
+    "avclient-livekit.audioAutoSensitivity": foundry.data.fields.BooleanField<{
+      initial: true;
     }>;
     "avclient-livekit.audioNoiseGateThreshold": foundry.data.fields.NumberField<{
       required: true;

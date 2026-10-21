@@ -37,7 +37,6 @@ export default class NoiseModelMenu {
 
   private items(): MenuItem[] {
     const client = this.client;
-    const krispActive = client.getAudioProcessingConfig().model === "krisp";
     const changed = () => {
       client.onNoiseSettingsChanged();
     };
@@ -52,20 +51,16 @@ export default class NoiseModelMenu {
       onSelect: () => client.selectNoiseModel(option.model).then(changed),
     }));
 
-    // The refinements apply whether or not a model is selected, except auto
-    // gain control, which is not used while Krisp is active. The noise gate
-    // is in the voice settings, as the input sensitivity.
+    // The refinements apply whether or not a model is selected. The voice
+    // activity gate is in the voice settings, as the input sensitivity.
     const refinement = (
       key: "audioAutoGainControl" | "audioEchoCancellation",
-      disabled: boolean,
     ): MenuItem => {
       const value = game.settings?.get(MODULE_NAME, key) ?? false;
       return {
         type: "checkbox",
         label: localize(key),
-        detail: disabled ? localize("krispRefinementDisabled") : undefined,
-        checked: value && !disabled,
-        disabled,
+        checked: value,
         onSelect: () =>
           game.settings?.set(MODULE_NAME, key, !value).then(changed),
       };
@@ -76,8 +71,8 @@ export default class NoiseModelMenu {
       ...models,
       { type: "separator" },
       { type: "header", label: localize("noiseRefinements") },
-      refinement("audioAutoGainControl", krispActive),
-      refinement("audioEchoCancellation", false),
+      refinement("audioAutoGainControl"),
+      refinement("audioEchoCancellation"),
       { type: "separator" },
       {
         type: "action",

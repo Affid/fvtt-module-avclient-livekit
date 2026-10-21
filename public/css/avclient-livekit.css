@@ -679,6 +679,10 @@
   background: var(--lk-color-text-on-color);
 }
 
+.livekit-slider-hint {
+  margin: var(--lk-space-2) 0 var(--lk-space-5);
+}
+
 /* Push to talk shortcut */
 .livekit-keybind {
   width: auto;
@@ -727,6 +731,9 @@
   width: 0;
   height: 100%;
   background: var(--lk-color-yellow);
+  transition:
+    width 50ms linear,
+    background-color var(--lk-duration-fast) var(--lk-ease);
 }
 
 .livekit-meter-fill.open {
@@ -772,12 +779,9 @@
   background: var(--lk-color-text-on-color);
 }
 
-.livekit-meter.disabled {
-  opacity: 0.4;
-}
-
-.livekit-meter.disabled .livekit-meter-threshold {
-  cursor: default;
+/* Automatic sensitivity: the level only, without the threshold marker */
+.livekit-meter.is-auto .livekit-meter-threshold {
+  visibility: hidden;
 }
 
 .livekit-meter-caption {

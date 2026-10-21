@@ -27,6 +27,7 @@ const log = new Logger("AudioSettingsPopover");
 export default class AudioSettingsPopover {
   private readonly popover = new Popover("livekit-audio-settings", () => {
     this.meter?.stop();
+    this.client.previewVoiceGate();
   });
   private meter?: InputLevelMeter;
 
@@ -84,7 +85,7 @@ export default class AudioSettingsPopover {
 
     const titleId = uniqueId("title");
     this.popover.element.setAttribute("aria-labelledby", titleId);
-    this.popover.element.replaceChildren(
+    const sections = [
       el("h3", {
         className: "livekit-popover-title",
         text: localize("voiceSettings"),
@@ -98,6 +99,9 @@ export default class AudioSettingsPopover {
         className: "livekit-popover-footer",
         children: [advanced],
       }),
+    ];
+    this.popover.element.replaceChildren(
+      ...sections.filter((section) => section !== false),
     );
     this.popover.reposition();
     if (wasMetering) {
@@ -180,26 +184,33 @@ export default class AudioSettingsPopover {
     );
   }
 
-  private renderSensitivity(): HTMLElement {
-    const krispActive =
-      this.client.getAudioProcessingConfig().model === "krisp";
-    const enabled = game.settings?.get(MODULE_NAME, "audioNoiseGate") ?? false;
-    const threshold =
-      game.settings?.get(MODULE_NAME, "audioNoiseGateThreshold") ?? -50;
-
+  /**
+   * Input sensitivity, in Voice Activity mode only: automatic, or a threshold
+   * set on the level meter. Dragging the threshold tries it out on the
+   * microphone right away; letting go saves it.
+   */
+  private renderSensitivity(): HTMLElement | false {
+    if (this.client.settings.client.voice.mode !== "always") {
+      this.meter = undefined;
+      return false;
+    }
+    const settings = this.client.getVoiceGateSettings();
     const caption = el("span", {
       className: "livekit-meter-caption",
-      text: `${threshold.toString()} dB`,
+      text: `${settings.threshold.toString()} dB`,
     });
     this.meter = new InputLevelMeter({
-      threshold,
-      disabled: !enabled || krispActive,
-      onInput: (value) => {
-        caption.textContent = `${value.toString()} dB`;
+      settings,
+      onInput: (threshold) => {
+        caption.textContent = `${threshold.toString()} dB`;
+        this.client.previewVoiceGate({ auto: false, threshold });
       },
-      onChange: (value) => {
+      onChange: (threshold) => {
         game.settings
-          ?.set(MODULE_NAME, "audioNoiseGateThreshold", value)
+          ?.set(MODULE_NAME, "audioNoiseGateThreshold", threshold)
+          .then(() => {
+            this.client.previewVoiceGate();
+          })
           .catch((error: unknown) => {
             log.error("Error saving the input sensitivity:", error);
           });
@@ -209,38 +220,33 @@ export default class AudioSettingsPopover {
     return this.section(
       localize("inputSensitivity"),
       switchInput({
-        label: localize("inputSensitivityEnable"),
-        checked: enabled && !krispActive,
-        disabled: krispActive,
+        label: localize("audioAutoSensitivity"),
+        checked: settings.auto,
         onChange: (checked) => {
           void game.settings
-            ?.set(MODULE_NAME, "audioNoiseGate", checked)
+            ?.set(MODULE_NAME, "audioAutoSensitivity", checked)
             .then(() => this.render());
         },
       }),
       this.meter.element,
       el("p", {
         className: "livekit-setting-hint",
-        text: krispActive
-          ? localize("krispRefinementDisabled")
-          : localize("inputSensitivityHint"),
-        children: [!krispActive && caption],
+        text: localize(
+          settings.auto ? "inputSensitivityAutoHint" : "inputSensitivityHint",
+        ),
+        children: [!settings.auto && caption],
       }),
     );
   }
 
   private renderNoiseSuppression(): HTMLElement {
     const options = this.client.getNoiseModelOptions();
-    const krispActive =
-      this.client.getAudioProcessingConfig().model === "krisp";
     const settingToggle = (
       key: "audioEchoCancellation" | "audioAutoGainControl",
-      disabled: boolean,
     ) =>
       switchInput({
         label: localize(key),
-        checked: (game.settings?.get(MODULE_NAME, key) ?? false) && !disabled,
-        disabled,
+        checked: game.settings?.get(MODULE_NAME, key) ?? false,
         onChange: (checked) => {
           void game.settings
             ?.set(MODULE_NAME, key, checked)
@@ -263,8 +269,8 @@ export default class AudioSettingsPopover {
             });
         },
       }),
-      settingToggle("audioEchoCancellation", false),
-      settingToggle("audioAutoGainControl", krispActive),
+      settingToggle("audioEchoCancellation"),
+      settingToggle("audioAutoGainControl"),
     );
   }
 }

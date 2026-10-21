@@ -35,14 +35,19 @@ import {
   DEFAULT_NOISE_SUPPRESSION_MODEL,
   NOISE_SUPPRESSION_SAMPLE_RATE,
   type NoiseCancellationModel,
-  type NoiseSuppressorFilterOptions,
+  type VoiceGateOptions,
 } from "./NoiseSuppressorFilter";
 import {
   createKrispNoiseFilter,
   isKrispSupported,
   isLiveKitCloud,
+  type KrispProcessor,
 } from "./KrispNoiseFilter";
-import type { KrispNoiseFilterProcessor } from "@livekit/krisp-noise-filter";
+import VoiceActivityGate, {
+  VoiceGateError,
+  type VoiceGateReport,
+  type VoiceGateSettings,
+} from "./VoiceActivityGate";
 import { LANG_NAME, MODULE_NAME } from "./utils/constants";
 import LiveKitAVClient from "./LiveKitAVClient";
 import {
@@ -80,25 +85,29 @@ function isClientSettingStored(key: string): boolean {
 }
 
 /**
- * The client-side audio processing to run on the local microphone. Krisp is
- * never combined with the noise gate.
+ * The client-side audio processing to run on the local microphone: a noise
+ * suppression model, then the voice activity gate.
  */
-type AudioProcessingConfig =
-  | NoiseSuppressorFilterOptions
-  | { model: "krisp"; gateThreshold?: undefined };
+interface AudioProcessingConfig {
+  model?: NoiseCancellationModel;
+  gate?: boolean;
+}
 
 /**
  * A key identifying a client-side audio processor configuration, used to tell
- * whether the processor on a track needs to be replaced.
+ * whether the processor on a track needs to be replaced. The gate's settings
+ * are not part of it, as they change on the running gate.
  */
-function getAudioProcessorKey({
-  model,
-  gateThreshold,
-}: AudioProcessingConfig): string {
-  if (!model && gateThreshold === undefined) {
+function getAudioProcessorKey({ model, gate }: AudioProcessingConfig): string {
+  if (!model && !gate) {
     return NO_AUDIO_PROCESSOR;
   }
-  return `${model ?? NO_AUDIO_PROCESSOR}|gate:${gateThreshold?.toString() ?? "off"}`;
+  return `${model ?? NO_AUDIO_PROCESSOR}|gate:${gate ? "on" : "off"}`;
+}
+
+/** A processor that may run a voice activity gate */
+interface GatedProcessor {
+  gate?: VoiceActivityGate;
 }
 
 export enum InitState {
@@ -124,6 +133,13 @@ export default class LiveKitClient {
     verified?: boolean;
   } | null = null;
   failedAudioProcessors = new Set<string>();
+  /** The voice activity gate failed to start; audio is sent without it */
+  voiceGateFailed = false;
+  private voiceGatePreview?: VoiceGateSettings;
+  private readonly voiceGateListeners = new Set<
+    (report: VoiceGateReport) => void
+  >();
+  private gateSpeaking = false;
   krispSupported: boolean | undefined;
   liveKitServerAddress: string | undefined;
   scheduleAudioSourceChange: () => void = () => undefined;
@@ -477,7 +493,7 @@ export default class LiveKitClient {
     await game.settings?.set(MODULE_NAME, "audioAutoGainControl", true);
     await game.settings?.set(MODULE_NAME, "audioEchoCancellation", true);
     await game.settings?.set(MODULE_NAME, "audioNoiseSuppression", true);
-    await game.settings?.set(MODULE_NAME, "audioNoiseGate", false);
+    await game.settings?.set(MODULE_NAME, "audioAutoSensitivity", true);
     await game.settings?.set(MODULE_NAME, "audioNoiseGateThreshold", -50);
   }
 
@@ -788,11 +804,6 @@ export default class LiveKitClient {
       if (model) {
         audioCaptureOptions.noiseSuppression = false;
       }
-      // Krisp works on the unprocessed level, so auto gain control (like the
-      // noise gate) is not used with it
-      if (model === "krisp") {
-        audioCaptureOptions.autoGainControl = false;
-      }
     }
 
     return audioCaptureOptions;
@@ -1011,25 +1022,22 @@ export default class LiveKitClient {
     }
 
     const selectedModel = this.getSelectedNoiseModel();
-    const gateThreshold =
-      (game.settings?.get(MODULE_NAME, "audioNoiseGate") ?? false)
-        ? (game.settings?.get(MODULE_NAME, "audioNoiseGateThreshold") ?? -50)
-        : undefined;
+    // The gate decides when to send audio in Voice Activity mode; with push
+    // to talk, the key does
+    const gate =
+      this.settings.get("client", "voice.mode") === "always" &&
+      !this.voiceGateFailed;
 
     const candidates: AudioProcessingConfig[] = [];
     if (selectedModel === "krisp") {
       if (this.isKrispAvailable()) {
-        // The noise gate is not used with Krisp
-        candidates.push({ model: "krisp" });
+        candidates.push({ model: "krisp", gate });
       }
-      candidates.push({
-        model: DEFAULT_NOISE_SUPPRESSION_MODEL,
-        gateThreshold,
-      });
+      candidates.push({ model: DEFAULT_NOISE_SUPPRESSION_MODEL, gate });
     } else {
       candidates.push({
         model: selectedModel === "none" ? undefined : selectedModel,
-        gateThreshold,
+        gate,
       });
     }
 
@@ -1090,10 +1098,16 @@ export default class LiveKitClient {
         // LiveKit requires an AudioContext to be set on the track before a
         // processor can be attached, so we provide our own 48kHz context here.
         track.setAudioContext(this.getAudioProcessorContext());
+        const gate: VoiceGateOptions | undefined = config.gate
+          ? {
+              settings: this.getVoiceGateSettings(),
+              onReport: this.onVoiceGateReport,
+            }
+          : undefined;
         await track.setProcessor(
           config.model === "krisp"
-            ? await createKrispNoiseFilter()
-            : new NoiseSuppressorFilter(config),
+            ? await createKrispNoiseFilter(gate)
+            : new NoiseSuppressorFilter({ model: config.model, gate }),
         );
         this.audioProcessorState = { track, key };
         log.info("Audio processor applied to local audio track:", key);
@@ -1103,21 +1117,29 @@ export default class LiveKitClient {
       }
     } catch (error: unknown) {
       log.error("Error applying audio processor", key, error);
-      this.failedAudioProcessors.add(key);
       this.audioProcessorState = { track, key: NO_AUDIO_PROCESSOR };
       if (track.getProcessor()) {
         await track.stopProcessor();
       }
 
-      const fallbackModel = this.getAudioProcessingConfig().model;
-      ui.notifications?.warn(
-        game.i18n?.format(`${LANG_NAME}.noiseSuppressionFailed`, {
-          model: this.getNoiseModelLabel(config.model ?? "none"),
-          fallback: fallbackModel
-            ? this.getNoiseModelLabel(fallbackModel)
-            : game.i18n.localize(`${LANG_NAME}.noiseSuppressionBrowser`),
-        }) ?? "noiseSuppressionFailed",
-      );
+      if (error instanceof VoiceGateError) {
+        // Keep the noise suppression model, without the gate
+        this.voiceGateFailed = true;
+        ui.notifications?.warn(`${LANG_NAME}.voiceGateFailed`, {
+          localize: true,
+        });
+      } else {
+        this.failedAudioProcessors.add(key);
+        const fallbackModel = this.getAudioProcessingConfig().model;
+        ui.notifications?.warn(
+          game.i18n?.format(`${LANG_NAME}.noiseSuppressionFailed`, {
+            model: this.getNoiseModelLabel(config.model ?? "none"),
+            fallback: fallbackModel
+              ? this.getNoiseModelLabel(fallbackModel)
+              : game.i18n.localize(`${LANG_NAME}.noiseSuppressionBrowser`),
+          }) ?? "noiseSuppressionFailed",
+        );
+      }
 
       // Apply the fallback. This terminates: every failure adds to the failed
       // set, and no processing at all cannot fail.
@@ -1137,9 +1159,7 @@ export default class LiveKitClient {
       // Not published yet: this is checked again after publishing
       return;
     }
-    const processor = track.getProcessor() as
-      | KrispNoiseFilterProcessor
-      | undefined;
+    const processor = track.getProcessor() as KrispProcessor | undefined;
     // Resolves to undefined if it was already enabled
     if ((await processor?.setEnabled(true)) === false) {
       throw new Error("The Krisp noise filter could not be enabled");
@@ -1160,6 +1180,7 @@ export default class LiveKitClient {
     const refresh = async () => {
       if (retryFailed) {
         this.failedAudioProcessors.clear();
+        this.voiceGateFailed = false;
       }
       const track = this.audioTrack;
       if (!track) {
@@ -1182,6 +1203,8 @@ export default class LiveKitClient {
 
       await this.restartAudioCapture(track);
       await this.applyAudioProcessors(track);
+      this.applyVoiceGateSettings();
+      this.updateGateSpeaking();
     };
 
     this.audioProcessingQueue = this.audioProcessingQueue
@@ -1190,6 +1213,84 @@ export default class LiveKitClient {
         log.error("Error refreshing audio processing:", error);
       });
     return this.audioProcessingQueue;
+  }
+
+  /* -------------------------------------------- */
+  /*  Voice activity gate                         */
+  /* -------------------------------------------- */
+
+  /**
+   * The voice activity gate on the microphone, while one runs (in Voice
+   * Activity mode).
+   */
+  get voiceGate(): VoiceActivityGate | undefined {
+    return (this.audioTrack?.getProcessor() as GatedProcessor | undefined)
+      ?.gate;
+  }
+
+  /**
+   * The voice activity gate's settings: the saved ones, or the ones being
+   * tried out.
+   */
+  getVoiceGateSettings(): VoiceGateSettings {
+    return (
+      this.voiceGatePreview ?? {
+        auto: game.settings?.get(MODULE_NAME, "audioAutoSensitivity") ?? true,
+        threshold:
+          game.settings?.get(MODULE_NAME, "audioNoiseGateThreshold") ?? -50,
+      }
+    );
+  }
+
+  /**
+   * Try out voice activity gate settings without saving them, e.g. while the
+   * settings window is open. Without settings, the saved ones apply again.
+   */
+  previewVoiceGate(settings?: VoiceGateSettings): void {
+    this.voiceGatePreview = settings;
+    this.applyVoiceGateSettings();
+  }
+
+  /**
+   * Send the current settings to every running gate, including the ones only
+   * measuring the level for a meter.
+   */
+  applyVoiceGateSettings(): void {
+    const settings = this.getVoiceGateSettings();
+    for (const gate of VoiceActivityGate.instances) {
+      gate.configure(settings);
+    }
+  }
+
+  /**
+   * Listen to the reports of the microphone's gate.
+   * @returns   A function that stops listening
+   */
+  onVoiceGateReports(listener: (report: VoiceGateReport) => void): () => void {
+    this.voiceGateListeners.add(listener);
+    return () => {
+      this.voiceGateListeners.delete(listener);
+    };
+  }
+
+  private readonly onVoiceGateReport = (report: VoiceGateReport) => {
+    for (const listener of this.voiceGateListeners) {
+      listener(report);
+    }
+    this.updateGateSpeaking();
+  };
+
+  /**
+   * While the gate runs, show the local user as speaking while it sends
+   * audio, so the speaking ring matches what others hear.
+   */
+  private updateGateSpeaking(): void {
+    const speaking =
+      !!this.voiceGate?.isOpen && !!this.audioTrack && !this.audioTrack.isMuted;
+    if (speaking !== this.gateSpeaking) {
+      this.gateSpeaking = speaking;
+      this.onIsSpeakingChanged(game.user?.id, speaking);
+    }
   }
 
   async initializeVideoTrack(): Promise<void> {
@@ -1852,10 +1953,12 @@ export default class LiveKitClient {
 
   setLocalParticipantCallbacks(): void {
     this.liveKitRoom?.localParticipant
-      .on(
-        ParticipantEvent.IsSpeakingChanged,
-        this.onIsSpeakingChanged.bind(this, game.user?.id),
-      )
+      .on(ParticipantEvent.IsSpeakingChanged, (speaking: boolean) => {
+        // While the voice activity gate runs, it tells when we speak
+        if (!this.voiceGate) {
+          this.onIsSpeakingChanged(game.user?.id, speaking);
+        }
+      })
       .on(ParticipantEvent.ParticipantMetadataChanged, (...args) => {
         log.debug("Local ParticipantEvent ParticipantMetadataChanged:", args);
       })

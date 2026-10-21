@@ -798,6 +798,11 @@ export default class LiveKitAVClient extends foundry.av.AVClient {
         log.error("Error changing video source:", error);
       });
 
+    // The voice activity gate only runs in Voice Activity mode
+    if (keys.has("client.voice.mode")) {
+      this._liveKitClient.scheduleAudioProcessingRefresh();
+    }
+
     // Change voice broadcasting mode
     const modeChange = [
       "client.voice.mode",

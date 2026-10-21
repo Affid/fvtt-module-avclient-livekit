@@ -131,8 +131,18 @@ When connected to a [LiveKit Cloud](https://livekit.io/cloud) server, **Krisp**
 is also offered. It is LiveKit's noise filter: it requires a supported browser
 (older Safari versions are not), and the browser downloads its models from
 `integrations.livekit.io`. If Krisp is not available or fails to start, the
-default open-source model is used instead. Auto gain control and the noise
-gate are not used while Krisp is active.
+default open-source model is used instead.
+
+## Input sensitivity
+
+In Voice Activity mode, your microphone is only sent while you speak, like in
+Discord. By default the sensitivity is set automatically: the module learns
+the level of your background noise and sends audio that is clearly louder.
+Turn off "Automatically determine input sensitivity" in the voice settings to
+set the threshold yourself on the level meter, which turns green while your
+voice is being sent. The input sensitivity works after noise cancellation, so
+it judges your voice rather than the noise, and the speaking ring shows
+exactly when you are being heard. With push to talk, the key decides instead.
 
 ## Third-party notices
 
