@@ -1,3 +1,7 @@
+# DISABLED: this workflow is kept for reference only. GitHub only runs
+# workflows located in .github/workflows/, so it never runs from here.
+# Releases are published manually; see RELEASING.md. To re-enable automatic
+# releases, move this file back to .github/workflows/.
 on:
   push:
     branches:

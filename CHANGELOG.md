@@ -1,6 +1,6 @@
 # LiveKit A/V Client for FoundryVTT: Changelog
 
-## Unreleased
+## 0.6.8-krisp.1
 
 - Add **Krisp** as a noise cancellation model when connected to a LiveKit Cloud server (via `@livekit/krisp-noise-filter`). It is only offered on LiveKit Cloud with a supported browser; otherwise, or if it fails to start, the default open-source model is used instead. Auto gain control and the noise gate are not used while Krisp is active.
 - Fix the microphone going silent when changing the input device with noise cancellation enabled.
