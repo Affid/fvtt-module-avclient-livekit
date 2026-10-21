@@ -1,5 +1,11 @@
 # LiveKit A/V Client for FoundryVTT: Changelog
 
+## 0.6.8-krisp.3
+
+- Fix all of the module's text showing as raw keys (e.g. `LIVEKITAVCLIENT.voiceSettings`): the English language file failed to load.
+- Fix the A/V Settings window not opening.
+- Radio buttons in the voice settings now match the rest of the interface.
+
 ## 0.6.8-krisp.2
 
 - Add a Discord-style interface (on by default; turn it off with the "Discord-style interface" setting):

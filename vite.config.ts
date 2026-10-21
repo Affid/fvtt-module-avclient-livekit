@@ -27,6 +27,30 @@ export default defineConfig({
     sourcemap: true,
   },
   plugins: [
+    // Foundry expands dotted translation keys into nested objects, and drops
+    // the whole language file if a key is both a string and a parent of other
+    // keys (e.g. "A.b" and "A.b.c"). Fail the build instead.
+    {
+      name: "validate-language-files",
+      buildStart: async function () {
+        const langDir = resolve(__dirname, "public/lang");
+        for (const file of await fs.readdir(langDir)) {
+          const keys = Object.keys(
+            JSON.parse(
+              await fs.readFile(path.join(langDir, file), "utf8"),
+            ) as Record<string, unknown>,
+          );
+          const conflicts = keys.filter((key) =>
+            keys.some((other) => other.startsWith(`${key}.`)),
+          );
+          if (conflicts.length) {
+            this.error(
+              `lang/${file}: keys used both as a string and as a group: ${conflicts.join(", ")}`,
+            );
+          }
+        }
+      },
+    },
     basicSsl(),
     checker({
       eslint: {
