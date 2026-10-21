@@ -88,10 +88,24 @@ By default, debug logs are disabled. If additional logs are needed for troublesh
 
 See [CHANGELOG](/CHANGELOG.md)
 
+## Noise cancellation
+
+Click the wand button in your camera controls to choose a noise cancellation
+model. The open-source models (GTCRN, RNNoise, and Speex) run entirely in your
+browser and work with any LiveKit server.
+
+When connected to a [LiveKit Cloud](https://livekit.io/cloud) server, **Krisp**
+is also offered. It is LiveKit's noise filter: it requires a supported browser
+(older Safari versions are not), and the browser downloads its models from
+`integrations.livekit.io`. If Krisp is not available or fails to start, the
+default open-source model is used instead. Auto gain control and the noise
+gate are not used while Krisp is active.
+
 ## Third-party notices
 
 The enhanced noise cancellation feature bundles open-source models
 (RNNoise, Speex, and GTCRN) via
-[`@sapphi-red/web-noise-suppressor`](https://github.com/sapphi-red/web-noise-suppressor).
+[`@sapphi-red/web-noise-suppressor`](https://github.com/sapphi-red/web-noise-suppressor),
+and LiveKit's [`@livekit/krisp-noise-filter`](https://www.npmjs.com/package/@livekit/krisp-noise-filter).
 See [THIRD-PARTY-NOTICES](/THIRD-PARTY-NOTICES.md) for their licenses and
 attributions.

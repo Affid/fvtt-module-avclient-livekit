@@ -364,6 +364,9 @@ export default class LiveKitAVClient extends foundry.av.AVClient {
       return false;
     }
 
+    // Remember the server, e.g. to tell whether it is LiveKit Cloud
+    this._liveKitClient.liveKitServerAddress = liveKitAddress;
+
     // If useExternalAV is enabled, send a join message instead of connecting
     if (this._liveKitClient.useExternalAV) {
       log.debug("useExternalAV set, not connecting to LiveKit");

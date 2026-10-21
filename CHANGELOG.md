@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Add **Krisp** as a noise cancellation model when connected to a LiveKit Cloud server (via `@livekit/krisp-noise-filter`). It is only offered on LiveKit Cloud with a supported browser; otherwise, or if it fails to start, the default open-source model is used instead. Auto gain control and the noise gate are not used while Krisp is active.
+- Fix the microphone going silent when changing the input device with noise cancellation enabled.
+- Noise cancellation settings now update the microphone in place instead of re-publishing it, and a model that fails to start falls back gracefully with a notification.
 - Add selectable noise suppression model for Enhanced Noise Cancellation: **GTCRN** (strongest neural model, default), **RNNoise** (balanced), and **Speex** (lightest on CPU). Selected from the new noise cancellation button in your camera controls or the "Noise Cancellation" setting; all models run entirely in the browser and work with self-hosted LiveKit servers.
 
 ## 0.6.8

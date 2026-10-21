@@ -31,12 +31,18 @@ import {
 import {
   NoiseSuppressorFilter,
   isNoiseSuppressionSupported,
-  toNoiseSuppressorModel,
+  toNoiseCancellationModel,
   DEFAULT_NOISE_SUPPRESSION_MODEL,
   NOISE_SUPPRESSION_SAMPLE_RATE,
+  type NoiseCancellationModel,
   type NoiseSuppressorFilterOptions,
-  type NoiseSuppressorModel,
 } from "./NoiseSuppressorFilter";
+import {
+  createKrispNoiseFilter,
+  isKrispSupported,
+  isLiveKitCloud,
+} from "./KrispNoiseFilter";
+import type { KrispNoiseFilterProcessor } from "@livekit/krisp-noise-filter";
 import { LANG_NAME, MODULE_NAME } from "./utils/constants";
 import LiveKitAVClient from "./LiveKitAVClient";
 import {
@@ -54,13 +60,21 @@ const log = new Logger();
 const NO_AUDIO_PROCESSOR = "none";
 
 /**
+ * The client-side audio processing to run on the local microphone. Krisp is
+ * never combined with the noise gate.
+ */
+type AudioProcessingConfig =
+  | NoiseSuppressorFilterOptions
+  | { model: "krisp"; gateThreshold?: undefined };
+
+/**
  * A key identifying a client-side audio processor configuration, used to tell
  * whether the processor on a track needs to be replaced.
  */
 function getAudioProcessorKey({
   model,
   gateThreshold,
-}: NoiseSuppressorFilterOptions): string {
+}: AudioProcessingConfig): string {
   if (!model && gateThreshold === undefined) {
     return NO_AUDIO_PROCESSOR;
   }
@@ -84,8 +98,14 @@ export default class LiveKitClient {
   audioCaptureParams: string | null = null;
   audioProcessingQueue: Promise<void> = Promise.resolve();
   audioProcessorContext?: AudioContext;
-  audioProcessorState: { track: LocalAudioTrack; key: string } | null = null;
+  audioProcessorState: {
+    track: LocalAudioTrack;
+    key: string;
+    verified?: boolean;
+  } | null = null;
   failedAudioProcessors = new Set<string>();
+  krispSupported: boolean | undefined;
+  liveKitServerAddress: string | undefined;
   noiseModelMenu: HTMLElement | null = null;
   noiseModelMenuDismiss: ((event: Event) => void) | null = null;
   noiseModelMenuTimeout: number | null = null;
@@ -275,29 +295,64 @@ export default class LiveKitClient {
     const title =
       game.i18n?.localize(`${LANG_NAME}.enhancedNoiseCancellation`) ??
       "Noise Cancellation";
-    button.ariaLabel = `${title}: ${this.getNoiseModelLabel(model)}`;
+    let label = this.getNoiseModelLabel(model);
+    // Show what is running instead when the selection isn't available
+    const runningModel = this.getAudioProcessingConfig().model ?? "none";
+    if (model !== "none" && runningModel !== model) {
+      label += ` → ${this.getNoiseModelLabel(runningModel)}`;
+    }
+    button.ariaLabel = `${title}: ${label}`;
   }
 
   /**
-   * The noise suppression model selected in the settings, or "none" when
+   * The noise cancellation model selected in the settings, or "none" when
    * enhanced noise cancellation is turned off. This may differ from the model
    * actually running (see getAudioProcessingConfig).
    */
-  private getSelectedNoiseModel(): NoiseSuppressorModel | "none" {
+  private getSelectedNoiseModel(): NoiseCancellationModel | "none" {
     if (
       !(game.settings?.get(MODULE_NAME, "enhancedNoiseCancellation") ?? false)
     ) {
       return "none";
     }
-    return toNoiseSuppressorModel(
+    return toNoiseCancellationModel(
       game.settings?.get(MODULE_NAME, "noiseSuppressionModel"),
     );
   }
 
   /**
-   * Localize the label for a noise suppression model (or "none").
+   * Whether the Krisp noise filter can be used: the room must be connected to
+   * a LiveKit Cloud server and the browser must support the filter.
    */
-  private getNoiseModelLabel(model: NoiseSuppressorModel | "none"): string {
+  isKrispAvailable(): boolean {
+    return (
+      this.krispSupported === true &&
+      isLiveKitCloud(this.liveKitRoom, this.liveKitServerAddress)
+    );
+  }
+
+  /**
+   * Check (once) whether this browser supports the Krisp noise filter. This
+   * loads the filter, so it is only done once connected to LiveKit Cloud.
+   */
+  private async checkKrispSupport(): Promise<void> {
+    if (this.krispSupported !== undefined) {
+      return;
+    }
+    this.krispSupported = await isKrispSupported();
+    if (!this.krispSupported && this.getSelectedNoiseModel() === "krisp") {
+      ui.notifications?.warn(
+        game.i18n?.format(`${LANG_NAME}.krispUnsupportedFallback`, {
+          fallback: this.getNoiseModelLabel(DEFAULT_NOISE_SUPPRESSION_MODEL),
+        }) ?? "krispUnsupportedFallback",
+      );
+    }
+  }
+
+  /**
+   * Localize the label for a noise cancellation model (or "none").
+   */
+  private getNoiseModelLabel(model: NoiseCancellationModel | "none"): string {
     const key = `${LANG_NAME}.noiseSuppressionModel${
       model.charAt(0).toUpperCase() + model.slice(1)
     }`;
@@ -378,12 +433,14 @@ export default class LiveKitClient {
   }
 
   /**
-   * Create a menu button with a leading icon and a label.
+   * Create a menu button with a leading icon, a label, and an optional detail
+   * line. Passing a null click handler creates a disabled item.
    */
   private createNoiseMenuItem(
     iconClass: string,
     labelText: string,
     onClick: (() => Promise<unknown> | undefined) | null,
+    detailText?: string,
   ): HTMLButtonElement {
     const item = document.createElement("button");
     item.type = "button";
@@ -395,6 +452,12 @@ export default class LiveKitClient {
 
     const label = document.createElement("span");
     label.textContent = labelText;
+    if (detailText) {
+      const detail = document.createElement("small");
+      detail.className = "livekit-noise-menu-detail";
+      detail.textContent = detailText;
+      label.append(detail);
+    }
     item.append(label);
 
     if (onClick) {
@@ -422,6 +485,7 @@ export default class LiveKitClient {
     menu.replaceChildren();
 
     const currentModel = this.getSelectedNoiseModel();
+    const krispActive = this.getAudioProcessingConfig().model === "krisp";
 
     // Refresh helper: rebuild + reposition + update the control-bar button
     const refresh = () => {
@@ -448,18 +512,33 @@ export default class LiveKitClient {
         "Noise Cancellation",
     );
 
-    // Model options
-    const models: (NoiseSuppressorModel | "none")[] = [
+    // Model options. Krisp is only offered on LiveKit Cloud, but is still
+    // listed (as unavailable) if it is the saved selection.
+    const isCloud = isLiveKitCloud(this.liveKitRoom, this.liveKitServerAddress);
+    const models: (NoiseCancellationModel | "none")[] = [
       "none",
       "speex",
       "rnnoise",
       "gtcrn",
     ];
+    if (isCloud || currentModel === "krisp") {
+      models.push("krisp");
+    }
     for (const option of models) {
+      let detail: string | undefined;
+      if (option === "krisp" && !isCloud) {
+        detail = game.i18n?.localize(`${LANG_NAME}.krispRequiresCloud`);
+      } else if (option === "krisp" && this.krispSupported === false) {
+        detail = game.i18n?.localize(`${LANG_NAME}.krispUnsupported`);
+      }
       const item = this.createNoiseMenuItem(
         option === currentModel ? "fa-check" : "",
         this.getNoiseModelLabel(option),
-        () => this.selectNoiseModel(option).then(refresh),
+        // Unavailable options can't be picked, but stay visible when selected
+        detail === undefined || option === currentModel
+          ? () => this.selectNoiseModel(option).then(refresh)
+          : null,
+        detail,
       );
       item.classList.toggle("active", option === currentModel);
       menu.append(item);
@@ -472,28 +551,39 @@ export default class LiveKitClient {
       game.i18n?.localize(`${LANG_NAME}.noiseRefinements`) ?? "Refinements",
     );
 
-    // Refinement toggles. These apply whether or not a model is selected.
-    const toggles: (
-      | "audioAutoGainControl"
-      | "audioEchoCancellation"
-      | "audioNoiseGate"
-    )[] = ["audioAutoGainControl", "audioEchoCancellation", "audioNoiseGate"];
-    for (const key of toggles) {
+    // Refinement toggles. These apply whether or not a model is selected,
+    // except auto gain control and the noise gate, which are not used while
+    // Krisp is active.
+    const krispDisabledDetail = game.i18n?.localize(
+      `${LANG_NAME}.krispRefinementDisabled`,
+    );
+    const toggles: {
+      key: "audioAutoGainControl" | "audioEchoCancellation" | "audioNoiseGate";
+      disabled: boolean;
+    }[] = [
+      { key: "audioAutoGainControl", disabled: krispActive },
+      { key: "audioEchoCancellation", disabled: false },
+      { key: "audioNoiseGate", disabled: krispActive },
+    ];
+    for (const { key, disabled } of toggles) {
       const value = game.settings?.get(MODULE_NAME, key) ?? false;
       const item = this.createNoiseMenuItem(
         value ? "fa-square-check" : "fa-square",
         game.i18n?.localize(`${LANG_NAME}.${key}`) ?? key,
-        () => game.settings?.set(MODULE_NAME, key, !value).then(refresh),
+        disabled
+          ? null
+          : () => game.settings?.set(MODULE_NAME, key, !value).then(refresh),
+        disabled ? krispDisabledDetail : undefined,
       );
       item.classList.add("toggle");
-      item.classList.toggle("active", value);
+      item.classList.toggle("active", value && !disabled);
       menu.append(item);
     }
 
-    // Noise gate threshold slider (disabled unless the gate is on)
-    const sliderDisabled = !(
-      game.settings?.get(MODULE_NAME, "audioNoiseGate") ?? false
-    );
+    // Noise gate threshold slider (disabled unless the gate is in use)
+    const sliderDisabled =
+      krispActive ||
+      !(game.settings?.get(MODULE_NAME, "audioNoiseGate") ?? false);
     const thresholdValue =
       game.settings?.get(MODULE_NAME, "audioNoiseGateThreshold") ?? -50;
     const thresholdName =
@@ -574,7 +664,7 @@ export default class LiveKitClient {
    * cancellation; selecting a model enables it and sets the active model.
    */
   private async selectNoiseModel(
-    model: NoiseSuppressorModel | "none",
+    model: NoiseCancellationModel | "none",
   ): Promise<void> {
     if (model === "none") {
       await game.settings?.set(MODULE_NAME, "enhancedNoiseCancellation", false);
@@ -762,6 +852,8 @@ export default class LiveKitClient {
             this.audioTrack,
             this.trackPublishOptions,
           );
+          // Some processors (Krisp) can only be verified once published
+          await this.applyAudioProcessors(this.audioTrack);
           game.user?.broadcastActivity({ av: { muted: false } });
           this.avMaster.render();
         }
@@ -853,8 +945,14 @@ export default class LiveKitClient {
       // When a noise suppression model will run, disable the browser's native
       // noise suppression to avoid double-processing the audio. The processor
       // itself is attached in applyAudioProcessors.
-      if (this.getAudioProcessingConfig().model) {
+      const { model } = this.getAudioProcessingConfig();
+      if (model) {
         audioCaptureOptions.noiseSuppression = false;
+      }
+      // Krisp works on the unprocessed level, so auto gain control (like the
+      // noise gate) is not used with it
+      if (model === "krisp") {
+        audioCaptureOptions.autoGainControl = false;
       }
     }
 
@@ -1074,10 +1172,14 @@ export default class LiveKitClient {
 
   /**
    * Determine which client-side audio processing should run on the local
-   * microphone, based on the settings, browser support, and any processors
-   * that previously failed to start.
+   * microphone, based on the settings, browser and server support, and any
+   * processors that previously failed to start.
+   *
+   * Krisp falls back to the default open-source model when it isn't available
+   * (not on LiveKit Cloud, unsupported browser, or it failed to start), and any
+   * failed configuration falls back to no processing.
    */
-  getAudioProcessingConfig(): NoiseSuppressorFilterOptions {
+  getAudioProcessingConfig(): AudioProcessingConfig {
     if (
       (game.settings?.get(MODULE_NAME, "audioMusicMode") ?? false) ||
       !isNoiseSuppressionSupported()
@@ -1086,19 +1188,34 @@ export default class LiveKitClient {
     }
 
     const selectedModel = this.getSelectedNoiseModel();
-    const config: NoiseSuppressorFilterOptions = {
-      model: selectedModel === "none" ? undefined : selectedModel,
-      gateThreshold:
-        (game.settings?.get(MODULE_NAME, "audioNoiseGate") ?? false)
-          ? (game.settings?.get(MODULE_NAME, "audioNoiseGateThreshold") ?? -50)
-          : undefined,
-    };
+    const gateThreshold =
+      (game.settings?.get(MODULE_NAME, "audioNoiseGate") ?? false)
+        ? (game.settings?.get(MODULE_NAME, "audioNoiseGateThreshold") ?? -50)
+        : undefined;
 
-    // Fall back to no processing if this combination already failed to start
-    if (this.failedAudioProcessors.has(getAudioProcessorKey(config))) {
-      return {};
+    const candidates: AudioProcessingConfig[] = [];
+    if (selectedModel === "krisp") {
+      if (this.isKrispAvailable()) {
+        // The noise gate is not used with Krisp
+        candidates.push({ model: "krisp" });
+      }
+      candidates.push({
+        model: DEFAULT_NOISE_SUPPRESSION_MODEL,
+        gateThreshold,
+      });
+    } else {
+      candidates.push({
+        model: selectedModel === "none" ? undefined : selectedModel,
+        gateThreshold,
+      });
     }
-    return config;
+
+    return (
+      candidates.find(
+        (config) =>
+          !this.failedAudioProcessors.has(getAudioProcessorKey(config)),
+      ) ?? {}
+    );
   }
 
   /**
@@ -1125,22 +1242,20 @@ export default class LiveKitClient {
    * chained inside one processor. Nothing is done if the right processor is
    * already in place.
    *
-   * If the processor fails to start, it is remembered as failed and the
-   * microphone is restarted with the browser's own noise suppression, which
-   * was turned off in favor of the model.
+   * If the processor fails to start, it is remembered as failed and the next
+   * best option is applied instead: an open-source model after Krisp, or the
+   * browser's own noise suppression (which was turned off in favor of the
+   * model).
    */
   private async applyAudioProcessors(track: LocalAudioTrack): Promise<void> {
     const config = this.getAudioProcessingConfig();
     const key = getAudioProcessorKey(config);
-    if (
+    const isCurrent =
       this.audioProcessorState?.track === track &&
-      this.audioProcessorState.key === key
-    ) {
-      return;
-    }
+      this.audioProcessorState.key === key;
 
     if (key === NO_AUDIO_PROCESSOR) {
-      if (track.getProcessor()) {
+      if (!isCurrent && track.getProcessor()) {
         await track.stopProcessor();
       }
       this.audioProcessorState = { track, key };
@@ -1148,22 +1263,66 @@ export default class LiveKitClient {
     }
 
     try {
-      // LiveKit requires an AudioContext to be set on the track before a
-      // processor can be attached, so we provide our own 48kHz context here.
-      track.setAudioContext(this.getAudioProcessorContext());
-      await track.setProcessor(new NoiseSuppressorFilter(config));
-      this.audioProcessorState = { track, key };
-      log.info("Audio processor applied to local audio track:", key);
+      if (!isCurrent) {
+        // LiveKit requires an AudioContext to be set on the track before a
+        // processor can be attached, so we provide our own 48kHz context here.
+        track.setAudioContext(this.getAudioProcessorContext());
+        await track.setProcessor(
+          config.model === "krisp"
+            ? await createKrispNoiseFilter()
+            : new NoiseSuppressorFilter(config),
+        );
+        this.audioProcessorState = { track, key };
+        log.info("Audio processor applied to local audio track:", key);
+      }
+      if (config.model === "krisp") {
+        await this.verifyKrispNoiseFilter(track);
+      }
     } catch (error: unknown) {
       log.error("Error applying audio processor", key, error);
       this.failedAudioProcessors.add(key);
       this.audioProcessorState = { track, key: NO_AUDIO_PROCESSOR };
+      if (track.getProcessor()) {
+        await track.stopProcessor();
+      }
+
+      const fallbackModel = this.getAudioProcessingConfig().model;
       ui.notifications?.warn(
         game.i18n?.format(`${LANG_NAME}.noiseSuppressionFailed`, {
           model: this.getNoiseModelLabel(config.model ?? "none"),
+          fallback: fallbackModel
+            ? this.getNoiseModelLabel(fallbackModel)
+            : game.i18n.localize(`${LANG_NAME}.noiseSuppressionBrowser`),
         }) ?? "noiseSuppressionFailed",
       );
+
+      // Apply the fallback. This terminates: every failure adds to the failed
+      // set, and no processing at all cannot fail.
       await this.restartAudioCapture(track);
+      await this.applyAudioProcessors(track);
+    }
+  }
+
+  /**
+   * Make sure the Krisp filter on a published track is actually enabled.
+   * Krisp enables itself once the track is published, after LiveKit Cloud has
+   * confirmed it may be used; if that fails it silently passes the audio
+   * through unprocessed, so check and throw to trigger the fallback.
+   */
+  private async verifyKrispNoiseFilter(track: LocalAudioTrack): Promise<void> {
+    if (!track.sid || this.audioProcessorState?.verified) {
+      // Not published yet: this is checked again after publishing
+      return;
+    }
+    const processor = track.getProcessor() as
+      | KrispNoiseFilterProcessor
+      | undefined;
+    // Resolves to undefined if it was already enabled
+    if ((await processor?.setEnabled(true)) === false) {
+      throw new Error("The Krisp noise filter could not be enabled");
+    }
+    if (this.audioProcessorState?.track === track) {
+      this.audioProcessorState.verified = true;
     }
   }
 
@@ -1313,6 +1472,13 @@ export default class LiveKitClient {
         this.trackPublishOptions,
       );
     }
+
+    // Now that the server is known, switch to Krisp if it was selected and
+    // this is LiveKit Cloud, or away from it if this server isn't
+    if (isLiveKitCloud(this.liveKitRoom, this.liveKitServerAddress)) {
+      await this.checkKrispSupport();
+    }
+    await this.refreshAudioProcessing();
   }
 
   onConnectionQualityChanged(quality: string, participant: Participant) {

@@ -36,3 +36,14 @@ the noise suppression models in the browser. It bundles the following models:
 The vendored assets are served locally from this module under
 `public/rnnoise/`, `public/speex/`, and `public/gtcrn/`; nothing is fetched from
 a third-party CDN at runtime.
+
+## @livekit/krisp-noise-filter
+
+- License: proprietary, see https://livekit.io/legal/terms-of-service
+- Copyright LiveKit, Inc.
+- https://www.npmjs.com/package/@livekit/krisp-noise-filter
+
+Provides the optional Krisp noise filter, which is only used when connected to
+a LiveKit Cloud server. It is bundled as a separate, lazily loaded chunk
+(`krisp-noise-filter-*.js`), and downloads its models from
+`integrations.livekit.io` when used.

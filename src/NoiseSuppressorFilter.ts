@@ -34,7 +34,14 @@ export const NOISE_SUPPRESSION_MODELS: readonly NoiseSuppressorModel[] = [
 ];
 
 /**
- * The model used when no valid model has been configured.
+ * Every selectable noise cancellation model: the open-source models plus
+ * Krisp, which is provided by LiveKit Cloud (see KrispNoiseFilter).
+ */
+export type NoiseCancellationModel = NoiseSuppressorModel | "krisp";
+
+/**
+ * The model used when no valid model has been configured, and as the fallback
+ * when Krisp isn't available.
  */
 export const DEFAULT_NOISE_SUPPRESSION_MODEL: NoiseSuppressorModel = "gtcrn";
 
@@ -70,10 +77,15 @@ export function isNoiseSuppressionSupported(): boolean {
 }
 
 /**
- * Normalize an arbitrary value into a valid noise suppression model, falling
+ * Normalize an arbitrary value into a valid noise cancellation model, falling
  * back to the default model when the value is unknown.
  */
-export function toNoiseSuppressorModel(value: unknown): NoiseSuppressorModel {
+export function toNoiseCancellationModel(
+  value: unknown,
+): NoiseCancellationModel {
+  if (value === "krisp") {
+    return value;
+  }
   return NOISE_SUPPRESSION_MODELS.includes(value as NoiseSuppressorModel)
     ? (value as NoiseSuppressorModel)
     : DEFAULT_NOISE_SUPPRESSION_MODEL;

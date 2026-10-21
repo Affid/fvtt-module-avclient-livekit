@@ -71,8 +71,9 @@ export default function registerModuleSettings(): void {
     },
   });
 
-  // Which client-side noise suppression model to use when enhanced noise
-  // cancellation is enabled.
+  // Which noise cancellation model to use when enhanced noise cancellation is
+  // enabled. Krisp is only used on LiveKit Cloud; elsewhere the default
+  // open-source model is used instead.
   game.settings?.register(MODULE_NAME, "noiseSuppressionModel", {
     name: "LIVEKITAVCLIENT.noiseSuppressionModel",
     hint: "LIVEKITAVCLIENT.noiseSuppressionModelHint",
@@ -87,6 +88,7 @@ export default function registerModuleSettings(): void {
         rnnoise: "LIVEKITAVCLIENT.noiseSuppressionModelRnnoise",
         speex: "LIVEKITAVCLIENT.noiseSuppressionModelSpeex",
         gtcrn: "LIVEKITAVCLIENT.noiseSuppressionModelGtcrn",
+        krisp: "LIVEKITAVCLIENT.noiseSuppressionModelKrisp",
       },
     }),
     onChange: () => {
