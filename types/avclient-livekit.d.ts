@@ -35,9 +35,10 @@ type LiveKitTokenFunction = (
 
 // Custom foundry socket message
 interface SocketMessage {
-  action: "breakout" | "connect" | "disconnect" | "render";
+  action: "breakout" | "connect" | "deafen" | "disconnect" | "render";
   userId?: string;
   breakoutRoom?: string;
+  deafened?: boolean;
 }
 
 /**
@@ -73,6 +74,15 @@ declare global {
     "avclient-livekit.breakoutRoomRegistry": BreakoutRoomRegistry;
     "avclient-livekit.displayConnectionQuality": foundry.data.fields.BooleanField<{
       initial: true;
+    }>;
+    "avclient-livekit.discordStyleUI": foundry.data.fields.BooleanField<{
+      initial: true;
+    }>;
+    "avclient-livekit.voicePanelPosition": { left: number; top: number } | null;
+    "avclient-livekit.userVolumes": Record<string, number | undefined>;
+    "avclient-livekit.userLocalMutes": Record<string, boolean | undefined>;
+    "avclient-livekit.mutedByDeafen": foundry.data.fields.BooleanField<{
+      initial: false;
     }>;
     "avclient-livekit.audioMusicMode": foundry.data.fields.BooleanField<{
       initial: false;

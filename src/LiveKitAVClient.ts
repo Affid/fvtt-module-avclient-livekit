@@ -107,6 +107,7 @@ export default class LiveKitAVClient extends foundry.av.AVClient {
     }
 
     this._liveKitClient.initState = InitState.Initialized;
+    this._liveKitClient.applyDiscordStyle();
     Hooks.callAll("liveKitClientInitialized", this._liveKitClient);
   }
 
@@ -808,6 +809,17 @@ export default class LiveKitAVClient extends foundry.av.AVClient {
         isAlways && this.master.canUserShareAudio(game.user?.id ?? ""),
       );
       this.master.broadcast(isAlways);
+    }
+
+    // Update the Discord-style interface (mute, deafen, input mode, output)
+    const voiceStateChange = [
+      "client.muteAll",
+      "client.voice.mode",
+      "client.audioSink",
+      `client.users.${game.user?.id ?? ""}.muted`,
+    ].some((k) => keys.has(k));
+    if (voiceStateChange) {
+      this._liveKitClient.onVoiceStateChanged();
     }
 
     // Re-render the AV camera view

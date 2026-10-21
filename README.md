@@ -89,6 +89,21 @@ By default, debug logs are disabled. If additional logs are needed for troublesh
 
 See [CHANGELOG](/CHANGELOG.md)
 
+## Discord-style interface
+
+By default, the module adds a Discord-style voice panel above the player list:
+connection status and ping, a disconnect button, and buttons to mute, deafen,
+choose the noise cancellation model, and open the voice settings (devices,
+voice activity or push to talk, input sensitivity with a live level meter).
+Drag the panel by its status row to move it.
+
+Camera views get a green ring around whoever is speaking, show the user's
+avatar while their camera is off, and show when a user is muted or deafened.
+Right-click another user's camera view to change their volume (up to 200%) or
+mute them just for yourself.
+
+Turn this off with the "Discord-style interface" module setting.
+
 ## Noise cancellation
 
 Click the wand button in your camera controls to choose a noise cancellation

@@ -15,6 +15,48 @@ export default function registerModuleSettings(): void {
     onChange: () => game.webrtc?.render(),
   });
 
+  // Discord-style interface: voice panel, speaking rings, avatars, per-user
+  // volume menu, and voice settings popover
+  game.settings?.register(MODULE_NAME, "discordStyleUI", {
+    name: "LIVEKITAVCLIENT.discordStyleUI",
+    hint: "LIVEKITAVCLIENT.discordStyleUIHint",
+    scope: "client",
+    config: true,
+    default: true,
+    type: new foundry.data.fields.BooleanField({ initial: true }),
+    onChange: () => {
+      game.webrtc?.client._liveKitClient.applyDiscordStyle();
+    },
+  });
+
+  // Where the voice panel was dragged to (null: above the player list)
+  game.settings?.register(MODULE_NAME, "voicePanelPosition", {
+    scope: "client",
+    config: false,
+    default: null,
+  });
+
+  // Per-user playback volumes (0 to 2) and local mutes, keyed by user ID
+  game.settings?.register(MODULE_NAME, "userVolumes", {
+    scope: "client",
+    config: false,
+    default: {},
+  });
+
+  game.settings?.register(MODULE_NAME, "userLocalMutes", {
+    scope: "client",
+    config: false,
+    default: {},
+  });
+
+  // Whether deafening muted the microphone, so undeafening unmutes it again
+  game.settings?.register(MODULE_NAME, "mutedByDeafen", {
+    scope: "client",
+    config: false,
+    default: false,
+    type: new foundry.data.fields.BooleanField({ initial: false }),
+  });
+
   game.settings?.register(MODULE_NAME, "liveKitConnectionSettings", {
     name: "LIVEKITAVCLIENT.liveKitConnectionSettings",
     hint: "LIVEKITAVCLIENT.liveKitConnectionSettingsHint",
