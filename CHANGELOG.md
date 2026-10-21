@@ -1,6 +1,6 @@
 # LiveKit A/V Client for FoundryVTT: Changelog
 
-## Unreleased
+## 0.6.8-krisp.2
 
 - Add a Discord-style interface (on by default; turn it off with the "Discord-style interface" setting):
   - A voice panel above the player list with connection status and ping, disconnect, mute, deafen, noise suppression, and voice settings. Drag it by its status row to move it.
