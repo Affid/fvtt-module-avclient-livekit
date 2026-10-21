@@ -12,18 +12,18 @@ import type {
   Track,
   TrackProcessor,
 } from "livekit-client";
-import { MODULE_NAME } from "./utils/constants";
+import { getModuleAssetRoute } from "./utils/helpers";
 import { Logger } from "./utils/logger";
 
 const log = new Logger("NoiseSuppressorFilter");
 
 // The AudioContext sample rate used for the noise suppression processors.
-// RNNoise requires 48kHz; the Speex and GTCRN worklets resample internally, so
-// a single 48kHz context works for every model.
+// RNNoise requires 48kHz; the Speex and GTCRN worklets support 48kHz natively,
+// so a single 48kHz context works for every model.
 export const NOISE_SUPPRESSION_SAMPLE_RATE = 48000;
 
 /**
- * The available client-side noise suppression models.
+ * The open-source noise suppression models that run entirely in the browser.
  */
 export type NoiseSuppressorModel = "rnnoise" | "speex" | "gtcrn";
 
@@ -34,28 +34,27 @@ export const NOISE_SUPPRESSION_MODELS: readonly NoiseSuppressorModel[] = [
 ];
 
 /**
+ * The model used when no valid model has been configured.
+ */
+export const DEFAULT_NOISE_SUPPRESSION_MODEL: NoiseSuppressorModel = "gtcrn";
+
+/**
  * A generic worklet node with a `destroy` method, shared by every model node
  * exposed by @sapphi-red/web-noise-suppressor.
  */
-type NoiseWorkletNode = (
+type NoiseWorkletNode =
   | RnnoiseWorkletNode
   | SpeexWorkletNode
-  | GtcrnWorkletNode
-) &
-  AudioNode;
+  | GtcrnWorkletNode;
 
-/**
- * Build an absolute route to a module asset, respecting any Foundry route
- * prefix when the helper is available.
- */
-function assetRoute(assetPath: string): string {
-  const relative = `modules/${MODULE_NAME}/${assetPath}`;
-  const getRoute = (
-    foundry as unknown as {
-      utils?: { getRoute?: (path: string) => string };
-    }
-  ).utils?.getRoute;
-  return typeof getRoute === "function" ? getRoute(relative) : `/${relative}`;
+export interface NoiseSuppressorFilterOptions {
+  /** The noise suppression model to run, or undefined to only gate. */
+  model?: NoiseSuppressorModel;
+  /**
+   * When provided (in dB), a noise gate is chained before the model so quiet
+   * background noise is silenced prior to denoising.
+   */
+  gateThreshold?: number;
 }
 
 /**
@@ -65,38 +64,56 @@ function assetRoute(assetPath: string): string {
 export function isNoiseSuppressionSupported(): boolean {
   return (
     typeof AudioWorkletNode !== "undefined" &&
-    typeof AudioContext !== "undefined"
+    typeof AudioContext !== "undefined" &&
+    typeof WebAssembly !== "undefined"
   );
 }
 
 /**
- * Normalize an arbitrary string into a valid noise suppression model,
- * defaulting to RNNoise when the value is unknown.
+ * Normalize an arbitrary value into a valid noise suppression model, falling
+ * back to the default model when the value is unknown.
  */
 export function toNoiseSuppressorModel(value: unknown): NoiseSuppressorModel {
   return NOISE_SUPPRESSION_MODELS.includes(value as NoiseSuppressorModel)
     ? (value as NoiseSuppressorModel)
-    : "gtcrn";
+    : DEFAULT_NOISE_SUPPRESSION_MODEL;
+}
+
+/**
+ * Wait for a WASM binary to load and make sure it is actually WebAssembly. The
+ * loaders don't check the HTTP status, and an invalid binary would otherwise
+ * only fail inside the AudioWorklet, silently muting the microphone.
+ */
+async function loadWasm(
+  name: string,
+  binary: Promise<ArrayBuffer>,
+): Promise<ArrayBuffer> {
+  const wasmBinary = await binary;
+  if (!WebAssembly.validate(wasmBinary)) {
+    throw new Error(`Failed to load a valid WASM binary for ${name}`);
+  }
+  return wasmBinary;
 }
 
 /**
  * A self-contained LiveKit audio TrackProcessor that runs an open-source noise
- * suppression model (via @sapphi-red/web-noise-suppressor) entirely in the
- * browser using an AudioWorklet. It requires no server-side support, so it
- * works with self-hosted LiveKit deployments.
+ * suppression model (via @sapphi-red/web-noise-suppressor) and/or a noise gate
+ * entirely in the browser using AudioWorklets. It requires no server-side
+ * support, so it works with self-hosted LiveKit deployments.
  *
  * Three models are supported:
  * - `rnnoise`: RNNoise, a lightweight recurrent-neural-network denoiser.
  * - `speex`: the classic Speex DSP noise suppressor (lowest CPU cost).
  * - `gtcrn`: GTCRN, a stronger neural model (highest quality, highest cost).
  */
-export class NoiseSuppressorFilter
-  implements TrackProcessor<Track.Kind.Audio, AudioProcessorOptions>
-{
+export class NoiseSuppressorFilter implements TrackProcessor<
+  Track.Kind.Audio,
+  AudioProcessorOptions
+> {
   name: string;
   processedTrack?: MediaStreamTrack;
 
-  private readonly model: NoiseSuppressorModel;
+  private readonly model?: NoiseSuppressorModel;
   private readonly gateThreshold?: number;
   private audioContext?: AudioContext;
   private sourceNode?: MediaStreamAudioSourceNode;
@@ -104,70 +121,81 @@ export class NoiseSuppressorFilter
   private workletNode?: NoiseWorkletNode;
   private destinationNode?: MediaStreamAudioDestinationNode;
 
-  /**
-   * @param model         The noise suppression model to run.
-   * @param gateThreshold When provided (in dB), a noise gate is chained before
-   *   the model so quiet background noise is silenced prior to denoising.
-   */
-  constructor(model: NoiseSuppressorModel = "gtcrn", gateThreshold?: number) {
+  constructor({ model, gateThreshold }: NoiseSuppressorFilterOptions) {
     this.model = model;
     this.gateThreshold = gateThreshold;
-    this.name = `noise-suppressor-${model}`;
+    this.name = `noise-suppressor-${model ?? "none"}${
+      typeof gateThreshold === "number" ? "-gate" : ""
+    }`;
   }
 
   async init(opts: AudioProcessorOptions): Promise<void> {
     // Use the AudioContext provided by LiveKit. The caller is responsible for
-    // ensuring it runs at 48kHz.
+    // ensuring it runs at 48kHz and for resuming it after a user gesture.
     this.audioContext = opts.audioContext;
 
-    if (this.audioContext.state === "suspended") {
-      await this.audioContext.resume();
+    try {
+      await this.buildGraph(this.audioContext, opts.track);
+    } catch (error: unknown) {
+      // Don't leave a half-built audio graph behind
+      await this.destroy();
+      throw error;
     }
 
-    this.workletNode = await this.createWorkletNode(this.audioContext);
+    log.info(`Noise suppression filter initialized (${this.name})`);
+  }
 
-    this.sourceNode = this.audioContext.createMediaStreamSource(
-      new MediaStream([opts.track]),
-    );
-    this.destinationNode = this.audioContext.createMediaStreamDestination();
-
-    // Optionally chain a noise gate before the model: source -> gate -> model.
+  private async buildGraph(
+    audioContext: AudioContext,
+    track: MediaStreamTrack,
+  ): Promise<void> {
+    // Load everything before touching the track so a failure leaves no
+    // partially connected nodes
+    if (this.model) {
+      this.workletNode = await this.createWorkletNode(audioContext, this.model);
+    }
     if (typeof this.gateThreshold === "number") {
-      await this.audioContext.audioWorklet.addModule(
-        assetRoute("noise-suppressor/noiseGateWorklet.js"),
+      await audioContext.audioWorklet.addModule(
+        getModuleAssetRoute("noise-suppressor/noiseGateWorklet.js"),
       );
-      this.gateNode = new NoiseGateWorkletNode(this.audioContext, {
+      this.gateNode = new NoiseGateWorkletNode(audioContext, {
         openThreshold: this.gateThreshold,
         closeThreshold: this.gateThreshold - 5,
         holdMs: 90,
         maxChannels: 1,
       });
-      this.sourceNode.connect(this.gateNode);
-      this.gateNode.connect(this.workletNode);
-    } else {
-      this.sourceNode.connect(this.workletNode);
     }
 
-    this.workletNode.connect(this.destinationNode);
+    this.sourceNode = audioContext.createMediaStreamSource(
+      new MediaStream([track]),
+    );
+    this.destinationNode = audioContext.createMediaStreamDestination();
+
+    // source -> [gate] -> [model] -> destination
+    let lastNode: AudioNode = this.sourceNode;
+    for (const node of [this.gateNode, this.workletNode]) {
+      if (node) {
+        lastNode.connect(node);
+        lastNode = node;
+      }
+    }
+    lastNode.connect(this.destinationNode);
 
     this.processedTrack = this.destinationNode.stream.getAudioTracks()[0];
-    log.info(
-      `Noise suppression filter initialized (model: ${this.model}${
-        typeof this.gateThreshold === "number" ? " + noise gate" : ""
-      })`,
-    );
   }
 
   private async createWorkletNode(
     audioContext: AudioContext,
+    model: NoiseSuppressorModel,
   ): Promise<NoiseWorkletNode> {
-    switch (this.model) {
+    switch (model) {
       case "speex": {
-        const wasmBinary = await loadSpeex({
-          url: assetRoute("speex/speex.wasm"),
-        });
+        const wasmBinary = await loadWasm(
+          model,
+          loadSpeex({ url: getModuleAssetRoute("speex/speex.wasm") }),
+        );
         await audioContext.audioWorklet.addModule(
-          assetRoute("speex/speexWorklet.js"),
+          getModuleAssetRoute("speex/speexWorklet.js"),
         );
         return new SpeexWorkletNode(audioContext, {
           wasmBinary,
@@ -175,25 +203,28 @@ export class NoiseSuppressorFilter
         });
       }
       case "gtcrn": {
-        const wasmBinary = await loadGtcrn({
-          url: assetRoute("gtcrn/gtcrn.wasm"),
-        });
+        const wasmBinary = await loadWasm(
+          model,
+          loadGtcrn({ url: getModuleAssetRoute("gtcrn/gtcrn.wasm") }),
+        );
         await audioContext.audioWorklet.addModule(
-          assetRoute("gtcrn/gtcrnWorklet.js"),
+          getModuleAssetRoute("gtcrn/gtcrnWorklet.js"),
         );
         return new GtcrnWorkletNode(audioContext, {
           wasmBinary,
           maxChannels: 1,
         });
       }
-      case "rnnoise":
-      default: {
-        const wasmBinary = await loadRnnoise({
-          url: assetRoute("rnnoise/rnnoise.wasm"),
-          simdUrl: assetRoute("rnnoise/rnnoise_simd.wasm"),
-        });
+      case "rnnoise": {
+        const wasmBinary = await loadWasm(
+          model,
+          loadRnnoise({
+            url: getModuleAssetRoute("rnnoise/rnnoise.wasm"),
+            simdUrl: getModuleAssetRoute("rnnoise/rnnoise_simd.wasm"),
+          }),
+        );
         await audioContext.audioWorklet.addModule(
-          assetRoute("rnnoise/rnnoiseWorklet.js"),
+          getModuleAssetRoute("rnnoise/rnnoiseWorklet.js"),
         );
         return new RnnoiseWorkletNode(audioContext, {
           wasmBinary,
@@ -204,8 +235,13 @@ export class NoiseSuppressorFilter
   }
 
   async restart(opts: AudioProcessorOptions): Promise<void> {
+    // LiveKit doesn't pass an AudioContext when restarting a processor (e.g.
+    // after the input device changes), so keep using the current one. The
+    // types claim it is always set, but it isn't on restart.
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+    const audioContext = opts.audioContext ?? this.audioContext;
     await this.destroy();
-    await this.init(opts);
+    await this.init({ ...opts, audioContext });
   }
 
   destroy(): Promise<void> {

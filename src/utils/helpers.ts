@@ -1,3 +1,4 @@
+import { MODULE_NAME } from "./constants";
 import { Logger } from "./logger";
 
 const log = new Logger();
@@ -40,6 +41,21 @@ export const debounceRefreshView: (userId: string) => void =
 
 export const sleep: (delay: number) => Promise<void> = (delay: number) =>
   new Promise((resolve) => setTimeout(resolve, delay));
+
+/**
+ * Build an absolute route to a file served from this module's directory,
+ * respecting any Foundry route prefix when the helper is available.
+ * @param {string} assetPath    The path relative to the module root
+ */
+export function getModuleAssetRoute(assetPath: string): string {
+  const relative = `modules/${MODULE_NAME}/${assetPath}`;
+  const getRoute = (
+    foundry as unknown as {
+      utils?: { getRoute?: (path: string) => string };
+    }
+  ).utils?.getRoute;
+  return typeof getRoute === "function" ? getRoute(relative) : `/${relative}`;
+}
 
 export function callWhenReady(fnToCall: () => unknown): void {
   if (game.ready) {

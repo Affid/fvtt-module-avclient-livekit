@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- Add selectable noise suppression model for Enhanced Noise Cancellation: **RNNoise** (balanced default), **Speex** (lightest on CPU), and **GTCRN** (strongest neural model). Selected via the new "Noise Suppression Model" dropdown; all models run entirely in the browser and work with self-hosted LiveKit servers.
+- Add selectable noise suppression model for Enhanced Noise Cancellation: **GTCRN** (strongest neural model, default), **RNNoise** (balanced), and **Speex** (lightest on CPU). Selected from the new noise cancellation button in your camera controls or the "Noise Cancellation" setting; all models run entirely in the browser and work with self-hosted LiveKit servers.
 
 ## 0.6.8
 

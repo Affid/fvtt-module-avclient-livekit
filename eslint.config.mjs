@@ -26,7 +26,6 @@ export default tseslint.config(
       "dist",
       "public",
       "coverage",
-      "public",
       "vite.config.ts",
       "eslint.config.mjs",
       "avclient-livekit.js",

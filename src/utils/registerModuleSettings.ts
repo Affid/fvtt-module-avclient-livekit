@@ -67,7 +67,7 @@ export default function registerModuleSettings(): void {
     default: true,
     type: new foundry.data.fields.BooleanField({ initial: true }),
     onChange: () => {
-      game.webrtc?.client._liveKitClient.scheduleAudioSourceChange();
+      game.webrtc?.client._liveKitClient.scheduleAudioProcessingRefresh();
     },
   });
 
@@ -90,7 +90,7 @@ export default function registerModuleSettings(): void {
       },
     }),
     onChange: () => {
-      game.webrtc?.client._liveKitClient.scheduleAudioSourceChange();
+      game.webrtc?.client._liveKitClient.scheduleAudioProcessingRefresh();
     },
   });
 
@@ -129,7 +129,7 @@ export default function registerModuleSettings(): void {
     default: true,
     type: new foundry.data.fields.BooleanField({ initial: true }),
     onChange: () => {
-      game.webrtc?.client._liveKitClient.scheduleAudioSourceChange();
+      game.webrtc?.client._liveKitClient.scheduleAudioProcessingRefresh();
     },
   });
 
@@ -141,7 +141,7 @@ export default function registerModuleSettings(): void {
     default: true,
     type: new foundry.data.fields.BooleanField({ initial: true }),
     onChange: () => {
-      game.webrtc?.client._liveKitClient.scheduleAudioSourceChange();
+      game.webrtc?.client._liveKitClient.scheduleAudioProcessingRefresh();
     },
   });
 
@@ -153,7 +153,7 @@ export default function registerModuleSettings(): void {
     default: true,
     type: new foundry.data.fields.BooleanField({ initial: true }),
     onChange: () => {
-      game.webrtc?.client._liveKitClient.scheduleAudioSourceChange();
+      game.webrtc?.client._liveKitClient.scheduleAudioProcessingRefresh();
     },
   });
 
@@ -166,7 +166,7 @@ export default function registerModuleSettings(): void {
     default: false,
     type: new foundry.data.fields.BooleanField({ initial: false }),
     onChange: () => {
-      game.webrtc?.client._liveKitClient.scheduleAudioSourceChange();
+      game.webrtc?.client._liveKitClient.scheduleAudioProcessingRefresh();
     },
   });
 
@@ -185,7 +185,7 @@ export default function registerModuleSettings(): void {
       initial: -50,
     }),
     onChange: () => {
-      game.webrtc?.client._liveKitClient.scheduleAudioSourceChange();
+      game.webrtc?.client._liveKitClient.scheduleAudioProcessingRefresh();
     },
   });
 
