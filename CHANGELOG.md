@@ -1,5 +1,16 @@
 # LiveKit A/V Client for FoundryVTT: Changelog
 
+## 0.6.8-krisp.4
+
+- The Discord-style interface now looks and behaves as one app: the voice panel, voice settings, noise suppression menu, user volume menu, camera views and the A/V Settings window share the same colors, buttons, switches, sliders, menus and tooltips.
+- Menus work with the keyboard: arrow keys, Home and End move between items, Escape closes the menu and returns to the button that opened it. Every control has a visible focus ring and a label for screen readers.
+- Voice settings: choose Voice Activity or Push to Talk with a two-way switch.
+- The A/V Settings window keeps its dark look with Foundry's light theme; its section list is aligned and no longer outlined in orange.
+- Fixes for Foundry v13 and v14:
+  - The camera dock's connect/disconnect toggle shows the right state (it showed "Connect" while connected).
+  - With the Discord-style interface, a camera view shows the user's round avatar whenever their video is hidden, and the speaking ring and mute/deafen badges replace Foundry's border and red icons.
+  - Turning your camera back on shows it in your camera view again.
+
 ## 0.6.8-krisp.3
 
 - Fix all of the module's text showing as raw keys (e.g. `LIVEKITAVCLIENT.voiceSettings`): the English language file failed to load.
