@@ -612,9 +612,37 @@
   cursor: pointer;
 }
 
-.livekit-radio input {
+/* Our own radio style, so Foundry's form styles don't apply */
+.livekit-radio input[type="radio"] {
+  flex: none;
+  width: 18px;
+  height: 18px;
   margin: 0;
-  accent-color: var(--livekit-blurple);
+  border: 2px solid #b5bac1;
+  border-radius: 50%;
+  background: transparent;
+  box-shadow: none;
+  appearance: none;
+  cursor: pointer;
+}
+
+.livekit-radio input[type="radio"]::before,
+.livekit-radio input[type="radio"]::after {
+  display: none;
+}
+
+.livekit-radio input[type="radio"]:checked {
+  border-color: var(--livekit-blurple);
+  background: radial-gradient(
+    circle,
+    var(--livekit-blurple) 0 4px,
+    transparent 4.5px
+  );
+}
+
+.livekit-radio input[type="radio"]:focus-visible {
+  outline: 2px solid #00a8fc;
+  outline-offset: 2px;
 }
 
 .livekit-switch {

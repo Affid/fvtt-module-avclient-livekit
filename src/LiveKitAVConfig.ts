@@ -25,6 +25,18 @@ import { LiveKitConnectionSettings } from "../types/avclient-livekit";
 
 const log = new Logger("LiveKitAVConfig");
 
+/**
+ * The application class AVConfig extends (Handlebars + ApplicationV2). This
+ * window builds all of its own content, so it skips AVConfig's handling of
+ * Foundry's A/V templates (its tabs, part contexts, and form listeners),
+ * which fails on content it didn't render.
+ */
+function applicationBase(): foundry.applications.settings.menus.AVConfig {
+  return Object.getPrototypeOf(
+    foundry.applications.settings.menus.AVConfig.prototype,
+  ) as foundry.applications.settings.menus.AVConfig;
+}
+
 interface PatreonLoginEvent extends MessageEvent {
   id: string;
 }
@@ -101,7 +113,11 @@ export default class LiveKitAVConfig
       foundry.applications.settings.menus.AVConfig["_prepareContext"]
     >[0],
   ): Promise<foundry.applications.api.ApplicationV2.RenderContextOf<this>> {
-    const context = await super._prepareContext(options);
+    // @ts-expect-error - calling the protected method of the base application
+    const context = (await applicationBase()._prepareContext.call(
+      this,
+      options,
+    )) as foundry.applications.api.ApplicationV2.RenderContextOf<this>;
     const avClient = game.webrtc?.client;
     const [audioSources, audioSinks, videoSources] = await Promise.all([
       avClient?.getAudioSources() ?? {},
@@ -131,11 +147,36 @@ export default class LiveKitAVConfig
   }
 
   /** @override */
+  async _preparePartContext(
+    partId: string,
+    context: foundry.applications.api.ApplicationV2.RenderContextOf<this>,
+    options: DeepPartial<foundry.applications.api.HandlebarsApplicationMixin.RenderOptions>,
+  ): Promise<foundry.applications.api.ApplicationV2.RenderContextOf<this>> {
+    // @ts-expect-error - calling the protected method of the base application
+    return applicationBase()._preparePartContext.call(
+      this,
+      partId,
+      context,
+      options,
+    );
+  }
+
+  /** @override */
+  _onChangeForm(
+    formConfig: foundry.applications.api.ApplicationV2.FormConfiguration,
+    event: Event,
+  ): void {
+    // @ts-expect-error - calling the protected method of the base application
+    applicationBase()._onChangeForm.call(this, formConfig, event);
+  }
+
+  /** @override */
   async _onRender(
     context: foundry.applications.api.ApplicationV2.RenderContextOf<this>,
     options: DeepPartial<foundry.applications.api.HandlebarsApplicationMixin.RenderOptions>,
   ) {
-    await super._onRender(context, options);
+    // @ts-expect-error - calling the protected method of the base application
+    await applicationBase()._onRender.call(this, context, options);
     this.meter?.stop();
 
     const root = this.element.querySelector("[data-livekit-settings]");
@@ -693,7 +734,7 @@ export default class LiveKitAVConfig
         options: ["disabled", "audio", "video", "audioVideo"].map(
           (avMode, index) => ({
             value: index.toString(),
-            label: localize(`avMode.${avMode}`),
+            label: localize(`avModeOption.${avMode}`),
           }),
         ),
         value: String(world.mode),
