@@ -1,9 +1,8 @@
 import { RemoteParticipant, Track } from "livekit-client";
 import type LiveKitClient from "../LiveKitClient";
-import { LANG_NAME } from "../utils/constants";
-import { el, icon } from "./dom";
-
-const DEFAULT_AVATAR = "icons/svg/mystery-man.svg";
+import Avatar, { badge } from "./Avatar";
+import { localize } from "./controls";
+import { el } from "./dom";
 
 /**
  * Adds Discord-style decorations to Foundry's camera views: a speaking ring,
@@ -58,7 +57,11 @@ export default class CameraViewDecorator {
     } else {
       this.speaking.delete(userId);
     }
-    this.getView(userId)?.classList.toggle("livekit-speaking", speaking);
+    const view = this.getView(userId);
+    view?.classList.toggle("livekit-speaking", speaking);
+    view
+      ?.querySelector(".livekit-camera-avatar .livekit-avatar")
+      ?.classList.toggle("is-speaking", speaking);
   }
 
   isSpeaking(userId: string): boolean {
@@ -77,30 +80,22 @@ export default class CameraViewDecorator {
       return;
     }
 
-    if (!view.querySelector(".livekit-avatar")) {
+    if (!view.querySelector(".livekit-camera-avatar")) {
       const user = game.users?.get(userId);
       const avatar = el("div", {
-        className: "livekit-avatar",
-        children: [
-          el("img", {
-            attrs: { src: user?.avatar ?? DEFAULT_AVATAR, alt: "" },
-          }),
-        ],
+        className: "livekit-camera-avatar",
+        children: [new Avatar({ src: user?.avatar, size: "fill" }).element],
       });
-      const badges = el("div", { className: "livekit-badges" });
+      const badges = el("div", { className: "livekit-camera-badges" });
       const ring = el("div", { className: "livekit-ring" });
 
       // Place the decorations with the video so they share its container
-      const video = view.querySelector("video.user-video");
+      const video = view.querySelector("video.user-camera");
       const container = video?.parentElement ?? view;
       if (getComputedStyle(container).position === "static") {
         container.classList.add("livekit-positioned");
       }
-      if (video) {
-        video.after(avatar, ring, badges);
-      } else {
-        container.append(avatar, ring, badges);
-      }
+      container.append(avatar, ring, badges);
     }
 
     if (!this.decoratedViews.has(view)) {
@@ -113,7 +108,12 @@ export default class CameraViewDecorator {
           }
           event.preventDefault();
           event.stopPropagation();
-          this.client.userVolumeMenu.open(userId, event.clientX, event.clientY);
+          this.client.userVolumeMenu.open(
+            userId,
+            event.clientX,
+            event.clientY,
+            view,
+          );
         });
       }
     }
@@ -125,28 +125,35 @@ export default class CameraViewDecorator {
     const muted = this.isUserMuted(userId);
     const deafened = this.client.voiceControls.isUserDeafened(userId);
     view.classList.toggle("livekit-speaking", this.speaking.has(userId));
-    view.classList.toggle("livekit-no-video", !this.hasVideo(userId));
+    // Foundry hides the video when it doesn't expect any, even if a track is
+    // playing
+    const video = view.querySelector<HTMLVideoElement>("video.user-camera");
+    view.classList.toggle(
+      "livekit-no-video",
+      !this.hasVideo(userId) || !video || video.hasAttribute("hidden"),
+    );
     view.classList.toggle("livekit-muted", muted);
     view.classList.toggle("livekit-deafened", deafened);
 
-    const badges = view.querySelector(".livekit-badges");
+    view
+      .querySelector(".livekit-camera-avatar .livekit-avatar")
+      ?.classList.toggle("is-speaking", this.speaking.has(userId));
+    const badges = view.querySelector(".livekit-camera-badges");
     if (badges) {
-      const localize = (key: string) =>
-        game.i18n?.localize(`${LANG_NAME}.${key}`) ?? key;
-      const badge = (iconName: string, label: string, className = "") =>
-        el("span", {
-          className: `livekit-badge ${className}`.trim(),
-          title: label,
-          children: [icon(iconName)],
-        });
       badges.replaceChildren();
       if (muted) {
-        badges.append(badge("fa-microphone-slash", localize("muted")));
+        badges.append(
+          badge({ icon: "fa-microphone-slash", label: localize("muted") }),
+        );
       }
       if (deafened) {
         // There is no free "headphones slash" icon; the slash is drawn in CSS
         badges.append(
-          badge("fa-headphones", localize("deafened"), "livekit-slashed"),
+          badge({
+            icon: "fa-headphones",
+            label: localize("deafened"),
+            slashed: true,
+          }),
         );
       }
     }

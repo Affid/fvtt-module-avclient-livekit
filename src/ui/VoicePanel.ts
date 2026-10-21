@@ -2,16 +2,15 @@ import { ConnectionQuality, ConnectionState } from "livekit-client";
 import type LiveKitClient from "../LiveKitClient";
 import { LANG_NAME, MODULE_NAME } from "../utils/constants";
 import { Logger } from "../utils/logger";
-import { clamp, el, icon, iconButton } from "./dom";
+import Avatar from "./Avatar";
+import { iconButton, setIconButtonState } from "./buttons";
+import { localize } from "./controls";
+import { clamp, el, icon, setTooltip, surface } from "./dom";
 
 const log = new Logger("VoicePanel");
 
-const DEFAULT_AVATAR = "icons/svg/mystery-man.svg";
 const PING_INTERVAL_MS = 2000;
 const MARGIN = 8;
-
-const localize = (key: string) =>
-  game.i18n?.localize(`${LANG_NAME}.${key}`) ?? key;
 
 /**
  * A Discord-style voice panel: connection status and ping, a disconnect
@@ -23,15 +22,12 @@ export default class VoicePanel {
   readonly element: HTMLElement;
   private readonly statusText = el("span", {
     className: "livekit-panel-status-text",
+    attrs: { role: "status" },
   });
   private readonly statusIcon = icon("fa-signal", "livekit-panel-signal");
   private readonly subtext = el("span", { className: "livekit-panel-subtext" });
   private readonly connectionButton: HTMLButtonElement;
-  private readonly avatarImage = el("img", { attrs: { alt: "" } });
-  private readonly avatar = el("div", {
-    className: "livekit-panel-avatar",
-    children: [this.avatarImage],
-  });
+  private readonly avatar = new Avatar({ className: "livekit-panel-avatar" });
   private readonly userName = el("span", { className: "livekit-panel-name" });
   private readonly userSubtext = el("span", {
     className: "livekit-panel-subtext",
@@ -44,35 +40,48 @@ export default class VoicePanel {
   private pingTimer: number | undefined;
 
   constructor(private readonly client: LiveKitClient) {
-    this.connectionButton = iconButton(
-      "fa-phone-slash",
-      "",
-      () => {
+    this.connectionButton = iconButton({
+      icon: "fa-phone-slash",
+      label: localize("disconnect"),
+      className: "livekit-panel-connection",
+      onClick: () => {
         this.toggleConnection();
       },
-      "livekit-panel-connection",
-    );
-    this.muteButton = iconButton("fa-microphone", "", () => {
-      this.client.voiceControls.toggleMute();
     });
-    this.deafenButton = iconButton("fa-headphones", "", () => {
-      this.client.voiceControls.toggleDeafen();
+    this.muteButton = iconButton({
+      icon: "fa-microphone",
+      label: localize("mute"),
+      onClick: () => {
+        this.client.voiceControls.toggleMute();
+      },
     });
-    this.noiseButton = iconButton(
-      "fa-wand-magic-sparkles",
-      localize("enhancedNoiseCancellation"),
-      () => {
-        this.client.toggleNoiseModelMenu(this.noiseButton, this.element);
+    this.deafenButton = iconButton({
+      icon: "fa-headphones",
+      label: localize("deafen"),
+      onClick: () => {
+        this.client.voiceControls.toggleDeafen();
       },
-    );
-    this.settingsButton = iconButton(
-      "fa-gear",
-      localize("voiceSettings"),
-      () => {
-        // Open above the panel rather than over it
-        this.client.audioSettingsPopover.toggle(this.element);
+    });
+    // The menus open above the panel rather than over it
+    this.noiseButton = iconButton({
+      icon: "fa-wand-magic-sparkles",
+      label: localize("enhancedNoiseCancellation"),
+      onClick: () => {
+        this.client.noiseModelMenu.toggle(this.element, this.noiseButton);
       },
-    );
+    });
+    this.noiseButton.setAttribute("aria-haspopup", "menu");
+    this.settingsButton = iconButton({
+      icon: "fa-gear",
+      label: localize("voiceSettings"),
+      onClick: () => {
+        this.client.audioSettingsPopover.toggle(
+          this.element,
+          this.settingsButton,
+        );
+      },
+    });
+    this.settingsButton.setAttribute("aria-haspopup", "dialog");
 
     const statusRow = el("div", {
       className: "livekit-panel-status",
@@ -92,32 +101,38 @@ export default class VoicePanel {
     });
     this.makeDraggable(statusRow);
 
-    this.element = el("section", {
-      className: "livekit-voice-panel",
-      attrs: { "aria-label": localize("voicePanel") },
-      children: [
-        statusRow,
-        el("div", {
-          className: "livekit-panel-user",
-          children: [
-            this.avatar,
-            el("div", {
-              className: "livekit-panel-user-info",
-              children: [this.userName, this.userSubtext],
-            }),
-            el("div", {
-              className: "livekit-panel-buttons",
-              children: [
-                this.muteButton,
-                this.deafenButton,
-                this.noiseButton,
-                this.settingsButton,
-              ],
-            }),
-          ],
-        }),
-      ],
-    });
+    this.element = surface(
+      el("section", {
+        className: "livekit-voice-panel",
+        attrs: { "aria-label": localize("voicePanel") },
+        children: [
+          statusRow,
+          el("div", {
+            className: "livekit-panel-user",
+            children: [
+              this.avatar.element,
+              el("div", {
+                className: "livekit-panel-user-info",
+                children: [this.userName, this.userSubtext],
+              }),
+              el("div", {
+                className: "livekit-panel-buttons",
+                attrs: {
+                  role: "toolbar",
+                  "aria-label": localize("voicePanel"),
+                },
+                children: [
+                  this.muteButton,
+                  this.deafenButton,
+                  this.noiseButton,
+                  this.settingsButton,
+                ],
+              }),
+            ],
+          }),
+        ],
+      }),
+    );
   }
 
   /**
@@ -168,8 +183,15 @@ export default class VoicePanel {
     );
 
     const quality = room?.localParticipant.connectionQuality;
-    this.statusIcon.dataset.quality =
+    const shownQuality =
       connected && quality ? quality : ConnectionQuality.Unknown;
+    this.statusIcon.dataset.quality = shownQuality;
+    setTooltip(
+      this.statusIcon,
+      game.i18n?.localize(`${LANG_NAME}.connectionQuality.${shownQuality}`) ??
+        shownQuality,
+    );
+    this.statusIcon.setAttribute("role", "img");
 
     const place = this.client.breakoutRoom
       ? localize("breakoutRoom")
@@ -179,15 +201,15 @@ export default class VoicePanel {
         ? `${place} · ${this.pingMs.toString()} ms`
         : place;
 
-    const connectionLabel = localize(connected ? "disconnect" : "connect");
-    this.connectionButton.replaceChildren(
-      icon(connected ? "fa-phone-slash" : "fa-phone"),
-    );
-    this.connectionButton.dataset.tooltip = connectionLabel;
-    this.connectionButton.ariaLabel = connectionLabel;
-    this.connectionButton.disabled =
-      state === ConnectionState.Connecting ||
-      state === ConnectionState.Reconnecting;
+    setIconButtonState(this.connectionButton, {
+      icon: connected ? "fa-phone-slash" : "fa-phone",
+      label: localize(connected ? "disconnect" : "connect"),
+      disabled:
+        state === ConnectionState.Connecting ||
+        state === ConnectionState.Reconnecting,
+    });
+    this.connectionButton.classList.toggle("is-danger", connected);
+    this.connectionButton.classList.toggle("is-active", !connected);
 
     if (connected) {
       this.startPing();
@@ -198,14 +220,8 @@ export default class VoicePanel {
 
     // Local user
     const userId = game.user?.id ?? "";
-    const avatarSource = game.user?.avatar ?? DEFAULT_AVATAR;
-    if (this.avatarImage.getAttribute("src") !== avatarSource) {
-      this.avatarImage.setAttribute("src", avatarSource);
-    }
-    this.avatar.classList.toggle(
-      "livekit-speaking",
-      this.client.cameraViewDecorator.isSpeaking(userId),
-    );
+    this.avatar.setSource(game.user?.avatar);
+    this.avatar.setSpeaking(this.client.cameraViewDecorator.isSpeaking(userId));
     this.userName.textContent = game.user?.name ?? "";
 
     const runningModel = this.client.getAudioProcessingConfig().model;
@@ -216,37 +232,23 @@ export default class VoicePanel {
     const voice = this.client.voiceControls;
     const muted = voice.isMuted();
     const deafened = voice.isDeafened();
-    this.setToggle(
-      this.muteButton,
-      muted,
-      muted ? "fa-microphone-slash" : "fa-microphone",
-      localize(muted ? "unmute" : "mute"),
-    );
-    this.setToggle(
-      this.deafenButton,
-      deafened,
-      "fa-headphones",
-      localize(deafened ? "undeafen" : "deafen"),
-    );
-    this.deafenButton.classList.toggle("livekit-slashed", deafened);
-    this.noiseButton.classList.toggle("active", !!runningModel);
+    setIconButtonState(this.muteButton, {
+      icon: muted ? "fa-microphone-slash" : "fa-microphone",
+      label: localize(muted ? "unmute" : "mute"),
+      off: muted,
+      pressed: muted,
+    });
+    setIconButtonState(this.deafenButton, {
+      label: localize(deafened ? "undeafen" : "deafen"),
+      off: deafened,
+      slashed: deafened,
+      pressed: deafened,
+    });
+    setIconButtonState(this.noiseButton, { active: !!runningModel });
   }
 
   setSpeaking(speaking: boolean): void {
-    this.avatar.classList.toggle("livekit-speaking", speaking);
-  }
-
-  private setToggle(
-    button: HTMLButtonElement,
-    on: boolean,
-    iconName: string,
-    label: string,
-  ): void {
-    button.replaceChildren(icon(iconName));
-    button.classList.toggle("livekit-off", on);
-    button.dataset.tooltip = label;
-    button.ariaLabel = label;
-    button.setAttribute("aria-pressed", String(on));
+    this.avatar.setSpeaking(speaking);
   }
 
   private toggleConnection(): void {

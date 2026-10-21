@@ -1,123 +1,102 @@
 import type LiveKitClient from "../LiveKitClient";
 import { MAX_USER_VOLUME } from "../UserAudioMixer";
-import { LANG_NAME } from "../utils/constants";
-import { Popover, el, icon } from "./dom";
-
-const DEFAULT_AVATAR = "icons/svg/mystery-man.svg";
+import Avatar from "./Avatar";
+import Menu, { type MenuItem } from "./Menu";
+import { localize, slider } from "./controls";
+import { el } from "./dom";
 
 /**
  * A Discord-style context menu for another user's camera view: a volume
  * slider from 0% to 200%, and muting the user just for yourself.
  */
 export default class UserVolumeMenu {
-  private readonly popover = new Popover("livekit-user-menu");
+  private readonly menu: Menu;
+  private userId?: string;
 
-  constructor(private readonly client: LiveKitClient) {}
+  constructor(private readonly client: LiveKitClient) {
+    this.menu = new Menu(
+      "livekit-user-menu",
+      () => {
+        const user = game.users?.get(this.userId ?? "");
+        return user?.name ?? localize("userVolume");
+      },
+      () => this.items(),
+    );
+  }
 
-  open(userId: string, x: number, y: number): void {
-    const user = game.users?.get(userId);
-    if (!user) {
+  /**
+   * @param control   The element the menu was opened from
+   */
+  open(userId: string, x: number, y: number, control?: HTMLElement): void {
+    if (!game.users?.get(userId)) {
       return;
     }
-    this.render(userId, user.name, user.avatar ?? DEFAULT_AVATAR);
-    this.popover.openAtPoint(x, y);
+    this.userId = userId;
+    this.menu.openAtPoint(x, y, control);
   }
 
   close(): void {
-    this.popover.close();
+    this.menu.close();
   }
 
-  private render(userId: string, name: string, avatar: string): void {
+  private items(): MenuItem[] {
+    const userId = this.userId;
+    const user = game.users?.get(userId ?? "");
+    if (!userId || !user) {
+      return [];
+    }
     const mixer = this.client.userAudioMixer;
-    const localize = (key: string) =>
-      game.i18n?.localize(`${LANG_NAME}.${key}`) ?? key;
-    const percent = (volume: number) =>
-      `${Math.round(volume * 100).toString()}%`;
-
-    const volume = mixer.getVolume(userId);
-    const value = el("span", {
-      className: "livekit-user-menu-value",
-      text: percent(volume),
-    });
-    const slider = el("input", {
-      className: "livekit-slider",
-      attrs: {
-        type: "range",
-        min: "0",
-        max: (MAX_USER_VOLUME * 100).toString(),
-        step: "1",
-        value: Math.round(volume * 100).toString(),
-        "aria-label": localize("userVolume"),
-      },
-    });
-    const updateFill = () => {
-      slider.style.setProperty(
-        "--fill",
-        `${((Number(slider.value) / (MAX_USER_VOLUME * 100)) * 100).toString()}%`,
-      );
-    };
-    updateFill();
-    slider.addEventListener("input", () => {
-      const newVolume = Number(slider.value) / 100;
-      value.textContent = percent(newVolume);
-      updateFill();
-      mixer.setVolume(userId, newVolume, false);
-    });
-    slider.addEventListener("change", () => {
-      mixer.setVolume(userId, Number(slider.value) / 100);
-    });
-
+    const percent = (value: number) => `${Math.round(value).toString()}%`;
+    const avatar = new Avatar({ src: user.avatar, size: "sm" });
     const muted = mixer.isLocallyMuted(userId);
-    const muteItem = el("button", {
-      className: `livekit-menu-item livekit-menu-check ${muted ? "active" : ""}`,
-      attrs: { type: "button", role: "menuitemcheckbox" },
-      children: [
-        el("span", { text: localize("userLocalMute") }),
-        icon(muted ? "fa-square-check" : "fa-square"),
-      ],
-    });
-    muteItem.setAttribute("aria-checked", String(muted));
-    muteItem.addEventListener("click", () => {
-      void mixer.setLocallyMuted(userId, !muted).then(() => {
-        this.render(userId, name, avatar);
-      });
-    });
 
-    const resetItem = el("button", {
-      className: "livekit-menu-item",
-      attrs: { type: "button", role: "menuitem" },
-      children: [el("span", { text: localize("userVolumeReset") })],
-    });
-    resetItem.addEventListener("click", () => {
-      mixer.setVolume(userId, 1);
-      this.render(userId, name, avatar);
-    });
-
-    this.popover.element.replaceChildren(
-      el("div", {
-        className: "livekit-user-menu-header",
-        children: [
-          el("img", {
-            className: "livekit-user-menu-avatar",
-            attrs: { src: avatar, alt: "" },
-          }),
-          el("span", { className: "livekit-user-menu-name", text: name }),
-        ],
-      }),
-      el("div", { className: "livekit-menu-separator" }),
-      el("label", {
-        className: "livekit-user-menu-volume",
-        children: [
-          el("span", {
-            className: "livekit-user-menu-label",
-            children: [localize("userVolume"), value],
-          }),
-          slider,
-        ],
-      }),
-      el("div", { className: "livekit-menu-separator" }),
-      muteItem,
-      resetItem,
-    );
+    return [
+      {
+        type: "custom",
+        element: el("div", {
+          className: "livekit-user-menu-header",
+          children: [
+            avatar.element,
+            el("span", {
+              className: "livekit-user-menu-name",
+              text: user.name,
+            }),
+          ],
+        }),
+      },
+      { type: "separator" },
+      {
+        type: "custom",
+        element: slider({
+          label: localize("userVolume"),
+          min: 0,
+          max: MAX_USER_VOLUME * 100,
+          value: Math.round(mixer.getVolume(userId) * 100),
+          format: percent,
+          onInput: (value) => {
+            mixer.setVolume(userId, value / 100, false);
+          },
+          onChange: (value) => {
+            mixer.setVolume(userId, value / 100);
+          },
+        }),
+      },
+      { type: "separator" },
+      {
+        type: "checkbox",
+        label: localize("userLocalMute"),
+        checked: muted,
+        onSelect: () => mixer.setLocallyMuted(userId, !muted),
+      },
+      {
+        type: "action",
+        label: localize("userVolumeReset"),
+        icon: "fa-rotate-left",
+        keepOpen: true,
+        onSelect: () => {
+          mixer.setVolume(userId, 1);
+        },
+      },
+    ];
   }
 }

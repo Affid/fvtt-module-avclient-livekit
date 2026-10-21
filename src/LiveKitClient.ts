@@ -58,6 +58,7 @@ import VoiceControls from "./VoiceControls";
 import UserAudioMixer from "./UserAudioMixer";
 import AudioSettingsPopover from "./ui/AudioSettingsPopover";
 import CameraViewDecorator from "./ui/CameraViewDecorator";
+import NoiseModelMenu from "./ui/NoiseModelMenu";
 import UserVolumeMenu from "./ui/UserVolumeMenu";
 import VoicePanel from "./ui/VoicePanel";
 
@@ -125,10 +126,6 @@ export default class LiveKitClient {
   failedAudioProcessors = new Set<string>();
   krispSupported: boolean | undefined;
   liveKitServerAddress: string | undefined;
-  noiseModelMenu: HTMLElement | null = null;
-  noiseModelMenuDismiss: ((event: Event) => void) | null = null;
-  noiseModelMenuTimeout: number | null = null;
-  noiseModelMenuAnchor: HTMLElement | null = null;
   scheduleAudioSourceChange: () => void = () => undefined;
   scheduleAudioProcessingRefresh: () => void = () => undefined;
 
@@ -138,6 +135,7 @@ export default class LiveKitClient {
   readonly cameraViewDecorator = new CameraViewDecorator(this);
   readonly userVolumeMenu = new UserVolumeMenu(this);
   readonly audioSettingsPopover = new AudioSettingsPopover(this);
+  readonly noiseModelMenu = new NoiseModelMenu(this);
   private voicePanelInstance?: VoicePanel;
   breakoutRoom: string | undefined;
   connectionState: ConnectionState = ConnectionState.Disconnected;
@@ -293,8 +291,8 @@ export default class LiveKitClient {
       return;
     }
 
-    // Remove any stale menu left over from a previous render
-    this.closeNoiseModelMenu();
+    // Close a menu left open against a button from a previous render
+    this.noiseModelMenu.close();
 
     const noiseButton = document.createElement("button");
     noiseButton.type = "button";
@@ -306,7 +304,7 @@ export default class LiveKitClient {
     noiseButton.addEventListener("click", (event) => {
       event.preventDefault();
       event.stopPropagation();
-      this.toggleNoiseModelMenu(noiseButton);
+      this.noiseModelMenu.toggle(noiseButton);
     });
     element.before(noiseButton);
   }
@@ -316,7 +314,7 @@ export default class LiveKitClient {
    * current settings.
    * @param {HTMLElement} button   The noise model selector button
    */
-  private updateNoiseModelButton(button: HTMLElement): void {
+  updateNoiseModelButton(button: HTMLElement): void {
     const model = this.getSelectedNoiseModel();
     button.classList.toggle("active", model !== "none");
 
@@ -405,125 +403,6 @@ export default class LiveKitClient {
   }
 
   /**
-   * Toggle the noise model selection menu open or closed for the given button.
-   * @param {HTMLElement} button    The button that opens the menu
-   * @param {HTMLElement} anchor    The element to show the menu above
-   */
-  toggleNoiseModelMenu(button: HTMLElement, anchor = button): void {
-    if (this.noiseModelMenu) {
-      this.closeNoiseModelMenu();
-      return;
-    }
-    this.openNoiseModelMenu(button, anchor);
-  }
-
-  /**
-   * Open a popup menu above the given anchor. The menu lets the user pick the
-   * active noise cancellation model (or "None"), toggle the audio refinements
-   * (auto gain control, echo cancellation), and reset everything to defaults.
-   */
-  private openNoiseModelMenu(button: HTMLElement, anchor: HTMLElement): void {
-    this.closeNoiseModelMenu();
-
-    const menu = document.createElement("div");
-    menu.className = "livekit-noise-menu";
-    document.body.append(menu);
-    this.noiseModelMenu = menu;
-    this.noiseModelMenuAnchor = anchor;
-
-    this.renderNoiseMenuContent(menu, button);
-    this.positionNoiseMenu(menu, anchor);
-
-    // Close the menu when clicking anywhere outside of it or the button
-    this.noiseModelMenuDismiss = (dismissEvent: Event) => {
-      const target = dismissEvent.target;
-      if (
-        target instanceof Node &&
-        (menu.contains(target) || button.contains(target))
-      ) {
-        return;
-      }
-      this.closeNoiseModelMenu();
-    };
-    // Defer attaching so the opening click doesn't immediately dismiss it
-    this.noiseModelMenuTimeout = window.setTimeout(() => {
-      this.noiseModelMenuTimeout = null;
-      if (this.noiseModelMenuDismiss) {
-        document.addEventListener(
-          "pointerdown",
-          this.noiseModelMenuDismiss,
-          true,
-        );
-      }
-    }, 0);
-  }
-
-  /**
-   * Position the menu just above the given button using fixed positioning so it
-   * is not clipped by the camera view container.
-   */
-  private positionNoiseMenu(menu: HTMLElement, button: HTMLElement): void {
-    const rect = button.getBoundingClientRect();
-    menu.style.position = "fixed";
-    menu.style.left = `${Math.round(rect.left).toString()}px`;
-    menu.style.bottom = `${Math.round(
-      window.innerHeight - rect.top + 4,
-    ).toString()}px`;
-
-    // Keep the menu within the viewport horizontally
-    const menuRect = menu.getBoundingClientRect();
-    if (menuRect.right > window.innerWidth) {
-      menu.style.left = `${Math.round(
-        window.innerWidth - menuRect.width - 4,
-      ).toString()}px`;
-    }
-  }
-
-  /**
-   * Create a menu button with a leading icon, a label, and an optional detail
-   * line. Passing a null click handler creates a disabled item.
-   */
-  private createNoiseMenuItem(
-    iconClass: string,
-    labelText: string,
-    onClick: (() => Promise<unknown> | undefined) | null,
-    detailText?: string,
-  ): HTMLButtonElement {
-    const item = document.createElement("button");
-    item.type = "button";
-    item.className = "livekit-noise-menu-item";
-
-    const icon = document.createElement("i");
-    icon.className = `fa-solid fa-fw ${iconClass}`;
-    item.append(icon);
-
-    const label = document.createElement("span");
-    label.textContent = labelText;
-    if (detailText) {
-      const detail = document.createElement("small");
-      detail.className = "livekit-noise-menu-detail";
-      detail.textContent = detailText;
-      label.append(detail);
-    }
-    item.append(label);
-
-    if (onClick) {
-      item.addEventListener("click", (event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        onClick()?.catch((error: unknown) => {
-          log.error("Error applying noise menu selection:", error);
-        });
-      });
-    } else {
-      item.disabled = true;
-      item.classList.add("disabled");
-    }
-
-    return item;
-  }
-
-  /**
    * The noise cancellation models to offer, with their labels and whether
    * they can be selected. Krisp is only offered on LiveKit Cloud, but is still
    * listed (as unavailable) if it is the saved selection.
@@ -569,129 +448,6 @@ export default class LiveKitClient {
   }
 
   /**
-   * (Re)build the contents of the noise menu to reflect the current settings.
-   * Rebuilding replaces all child nodes, so the event listeners attached to the
-   * previous nodes are released for garbage collection.
-   */
-  private renderNoiseMenuContent(menu: HTMLElement, button: HTMLElement): void {
-    menu.replaceChildren();
-
-    const krispActive = this.getAudioProcessingConfig().model === "krisp";
-
-    // Refresh helper: rebuild + reposition + update the buttons
-    const refresh = () => {
-      if (this.noiseModelMenu === menu) {
-        this.renderNoiseMenuContent(menu, button);
-        this.positionNoiseMenu(menu, this.noiseModelMenuAnchor ?? button);
-      }
-      this.updateNoiseModelButton(button);
-      this.onVoiceStateChanged();
-    };
-
-    const appendSection = (className: string, text?: string) => {
-      const section = document.createElement("div");
-      section.className = className;
-      if (text) {
-        section.textContent = text;
-      }
-      menu.append(section);
-    };
-
-    // Header
-    appendSection(
-      "livekit-noise-menu-header",
-      game.i18n?.localize(`${LANG_NAME}.noiseSuppressionModel`) ??
-        "Noise Cancellation",
-    );
-
-    // Model options. Unavailable options can't be picked, but stay visible
-    // when selected.
-    for (const option of this.getNoiseModelOptions()) {
-      const item = this.createNoiseMenuItem(
-        option.selected ? "fa-check" : "",
-        option.label,
-        option.selectable || option.selected
-          ? () => this.selectNoiseModel(option.model).then(refresh)
-          : null,
-        option.detail,
-      );
-      item.classList.toggle("active", option.selected);
-      menu.append(item);
-    }
-
-    // Divider + refinements subheader
-    appendSection("livekit-noise-menu-divider");
-    appendSection(
-      "livekit-noise-menu-subheader",
-      game.i18n?.localize(`${LANG_NAME}.noiseRefinements`) ?? "Refinements",
-    );
-
-    // Refinement toggles. These apply whether or not a model is selected,
-    // except auto gain control, which is not used while Krisp is active. The
-    // noise gate is in the voice settings, as the input sensitivity.
-    const krispDisabledDetail = game.i18n?.localize(
-      `${LANG_NAME}.krispRefinementDisabled`,
-    );
-    const toggles: {
-      key: "audioAutoGainControl" | "audioEchoCancellation";
-      disabled: boolean;
-    }[] = [
-      { key: "audioAutoGainControl", disabled: krispActive },
-      { key: "audioEchoCancellation", disabled: false },
-    ];
-    for (const { key, disabled } of toggles) {
-      const value = game.settings?.get(MODULE_NAME, key) ?? false;
-      const item = this.createNoiseMenuItem(
-        value ? "fa-square-check" : "fa-square",
-        game.i18n?.localize(`${LANG_NAME}.${key}`) ?? key,
-        disabled
-          ? null
-          : () => game.settings?.set(MODULE_NAME, key, !value).then(refresh),
-        disabled ? krispDisabledDetail : undefined,
-      );
-      item.classList.add("toggle");
-      item.classList.toggle("active", value && !disabled);
-      menu.append(item);
-    }
-
-    // Divider + reset to defaults
-    appendSection("livekit-noise-menu-divider");
-    const reset = this.createNoiseMenuItem(
-      "fa-rotate-left",
-      game.i18n?.localize(`${LANG_NAME}.noiseResetDefaults`) ??
-        "Reset to defaults",
-      () => this.resetNoiseSettings().then(refresh),
-    );
-    reset.classList.add("reset");
-    menu.append(reset);
-  }
-
-  /**
-   * Close and clean up the noise model selection menu if it is open. Removes the
-   * outside-click listener, cancels the pending attach timeout, and detaches the
-   * menu element so all of its child listeners can be garbage collected.
-   */
-  private closeNoiseModelMenu(): void {
-    if (this.noiseModelMenuTimeout !== null) {
-      window.clearTimeout(this.noiseModelMenuTimeout);
-      this.noiseModelMenuTimeout = null;
-    }
-    if (this.noiseModelMenuDismiss) {
-      document.removeEventListener(
-        "pointerdown",
-        this.noiseModelMenuDismiss,
-        true,
-      );
-      this.noiseModelMenuDismiss = null;
-    }
-    if (this.noiseModelMenu) {
-      this.noiseModelMenu.remove();
-      this.noiseModelMenu = null;
-    }
-    this.noiseModelMenuAnchor = null;
-  }
-
-  /**
    * Apply a noise model selection. Selecting "none" disables enhanced noise
    * cancellation; selecting a model enables it and sets the active model.
    */
@@ -716,13 +472,25 @@ export default class LiveKitClient {
    * stale saved state (for example an old model that is no longer offered). The
    * settings' onChange handlers coalesce into a single debounced refresh.
    */
-  private async resetNoiseSettings(): Promise<void> {
+  async resetNoiseSettings(): Promise<void> {
     await this.selectNoiseModel(this.getDefaultNoiseModel());
     await game.settings?.set(MODULE_NAME, "audioAutoGainControl", true);
     await game.settings?.set(MODULE_NAME, "audioEchoCancellation", true);
     await game.settings?.set(MODULE_NAME, "audioNoiseSuppression", true);
     await game.settings?.set(MODULE_NAME, "audioNoiseGate", false);
     await game.settings?.set(MODULE_NAME, "audioNoiseGateThreshold", -50);
+  }
+
+  /**
+   * Refresh the noise suppression controls after a noise setting changed.
+   */
+  onNoiseSettingsChanged(): void {
+    for (const button of document.querySelectorAll<HTMLElement>(
+      ".livekit-noise-control",
+    )) {
+      this.updateNoiseModelButton(button);
+    }
+    this.onVoiceStateChanged();
   }
 
   /**
@@ -961,7 +729,7 @@ export default class LiveKitClient {
             this.trackPublishOptions,
           );
           const userVideoElement = document.querySelector(
-            `.camera-view[data-user="${game.user?.id ?? ""}"] video.user-video`,
+            `.camera-view[data-user="${game.user?.id ?? ""}"] video.user-camera`,
           );
           if (userVideoElement instanceof HTMLVideoElement) {
             this.attachVideoTrack(this.videoTrack, userVideoElement);
@@ -1794,6 +1562,8 @@ export default class LiveKitClient {
       return;
     }
 
+    // Foundry shows the mute state of users on its own A/V from their user
+    // activity; users on external A/V only report it to LiveKit
     if (useExternalAV) {
       if (publication.kind === Track.Kind.Audio) {
         this.avMaster.settings.handleUserActivity(fvttUserId, {
@@ -1803,22 +1573,6 @@ export default class LiveKitClient {
         this.avMaster.settings.handleUserActivity(fvttUserId, {
           hidden: publication.isMuted,
         });
-      }
-    } else {
-      const userCameraView = document.querySelector(
-        `.camera-view[data-user="${fvttUserId}"]`,
-      );
-      if (userCameraView) {
-        let uiIndicator;
-        if (publication.kind === Track.Kind.Audio) {
-          uiIndicator = userCameraView.querySelector(".status-remote-muted");
-        } else if (publication.kind === Track.Kind.Video) {
-          uiIndicator = userCameraView.querySelector(".status-remote-hidden");
-        }
-
-        if (uiIndicator) {
-          uiIndicator.classList.toggle("hidden", !publication.isMuted);
-        }
       }
     }
   }
@@ -2046,15 +1800,16 @@ export default class LiveKitClient {
   }
 
   setConnectionButtons(connected: boolean): void {
-    const userCameraView = document.querySelector(
-      `.camera-view[data-user="${game.user?.id ?? ""}"]`,
+    // The buttons are in the dock's controls, next to the camera views
+    const userControls = document.querySelector(
+      `.user-controls[data-user="${game.user?.id ?? ""}"]`,
     );
 
-    if (userCameraView) {
-      const connectButton = userCameraView.querySelector(
+    if (userControls) {
+      const connectButton = userControls.querySelector(
         ".livekit-control.connect",
       );
-      const disconnectButton = userCameraView.querySelector(
+      const disconnectButton = userControls.querySelector(
         ".livekit-control.disconnect",
       );
 

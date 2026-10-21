@@ -9,7 +9,6 @@ import {
 } from "./utils/auth.js";
 import type LiveKitClient from "./LiveKitClient";
 import {
-  InputLevelMeter,
   getPushToTalkBindings,
   keybindRecorder,
   localize,
@@ -18,9 +17,12 @@ import {
   setPushToTalkKey,
   settingRow,
   switchInput,
+  textInput,
 } from "./ui/controls";
 import { deviceOptions, noiseModelOptions } from "./ui/AudioSettingsPopover";
-import { el, icon } from "./ui/dom";
+import { button } from "./ui/buttons";
+import { el, icon, surface } from "./ui/dom";
+import { InputLevelMeter } from "./ui/LevelMeter";
 import { LiveKitConnectionSettings } from "../types/avclient-livekit";
 
 const log = new Logger("LiveKitAVConfig");
@@ -183,6 +185,7 @@ export default class LiveKitAVConfig
     if (!(root instanceof HTMLElement) || !this.data) {
       return;
     }
+    surface(root);
 
     const isGM = game.user?.isGM ?? false;
     const sections = this.sections().filter(
@@ -195,7 +198,10 @@ export default class LiveKitAVConfig
     // Sidebar navigation
     const navButtons = new Map<string, HTMLButtonElement>();
     const panes = new Map<string, HTMLElement>();
-    const nav = el("nav", { className: "livekit-settings-nav" });
+    const nav = el("nav", {
+      className: "livekit-settings-nav",
+      attrs: { "aria-label": game.i18n?.localize("WEBRTC.Title") ?? "" },
+    });
     for (const group of ["user", "world"] as const) {
       const groupSections = sections.filter(
         (section) => section.gmOnly === (group === "world"),
@@ -245,19 +251,23 @@ export default class LiveKitAVConfig
     // Discord's "unsaved changes" bar
     const unsavedBar = el("div", {
       className: "livekit-unsaved-bar",
-      attrs: { hidden: "" },
+      attrs: { hidden: "", role: "status" },
       children: [
         el("span", { text: localize("unsavedChanges") }),
         el("div", {
           className: "livekit-unsaved-actions",
           children: [
-            this.button(localize("unsavedReset"), "livekit-link-button", () => {
-              void this.render();
+            button({
+              label: localize("unsavedReset"),
+              variant: "link",
+              onClick: () => {
+                void this.render();
+              },
             }),
-            el("button", {
-              className: "livekit-button livekit-button-primary",
-              text: localize("unsavedSave"),
-              attrs: { type: "submit" },
+            button({
+              label: localize("unsavedSave"),
+              variant: "primary",
+              type: "submit",
             }),
           ],
         }),
@@ -308,29 +318,12 @@ export default class LiveKitAVConfig
   ): void {
     this.activeSection = id;
     for (const [sectionId, button] of navButtons) {
-      button.classList.toggle("active", sectionId === id);
-      button.setAttribute("aria-current", String(sectionId === id));
+      button.classList.toggle("is-selected", sectionId === id);
+      button.setAttribute("aria-current", sectionId === id ? "page" : "false");
     }
     for (const [sectionId, pane] of panes) {
       pane.hidden = sectionId !== id;
     }
-  }
-
-  private button(
-    text: string,
-    className: string,
-    onClick: () => void,
-  ): HTMLButtonElement {
-    const button = el("button", {
-      className,
-      text,
-      attrs: { type: "button" },
-    });
-    button.addEventListener("click", (event) => {
-      event.preventDefault();
-      onClick();
-    });
-    return button;
   }
 
   /* -------------------------------------------- */
@@ -495,15 +488,11 @@ export default class LiveKitAVConfig
           label: localize("pushToTalkDelay"),
           hint: localize("pushToTalkDelayHint"),
           inline: true,
-          control: el("input", {
-            className: "livekit-number",
-            attrs: {
-              type: "number",
-              name: "core.rtcClientSettings.voice.pttDelay",
-              min: "0",
-              step: "10",
-              value: String(client.voice.pttDelay),
-            },
+          control: textInput({
+            type: "number",
+            name: "core.rtcClientSettings.voice.pttDelay",
+            value: String(client.voice.pttDelay),
+            attrs: { min: "0", step: "10" },
           }),
         }),
       ],
@@ -511,6 +500,7 @@ export default class LiveKitAVConfig
     pushToTalkOptions.hidden = client.voice.mode !== "ptt";
     const inputMode = radioGroup({
       name: "core.rtcClientSettings.voice.mode",
+      label: localize("inputMode"),
       value: client.voice.mode,
       options: [
         { value: "always", label: localize("inputModeVoiceActivity") },
@@ -749,14 +739,12 @@ export default class LiveKitAVConfig
       settingRow({
         label: localize(`connection.${key}`),
         hint: hintFor(`connection.${key}`),
-        control: el("input", {
-          className: "livekit-text",
+        control: textInput({
+          type,
+          name: `${MODULE_NAME}.liveKitConnectionSettings.${key}`,
+          value: connection[key] ?? "",
           attrs: {
-            type,
-            name: `${MODULE_NAME}.liveKitConnectionSettings.${key}`,
-            value: connection[key] ?? "",
             autocomplete: type === "password" ? "one-time-code" : "off",
-            spellcheck: "false",
           },
         }),
       });
@@ -828,35 +816,36 @@ export default class LiveKitAVConfig
     const tokenInput = settingRow({
       label: localize("tavernAccountToken"),
       hint: localize("tavernAccountTokenHint"),
-      control: el("input", {
-        className: "livekit-text",
-        attrs: {
-          type: "password",
-          name: `${MODULE_NAME}.tavernPatreonToken`,
-          value: token,
-        },
+      control: textInput({
+        type: "password",
+        name: `${MODULE_NAME}.tavernPatreonToken`,
+        value: token,
       }),
     });
 
+    const patreonIcon = el("i", {
+      className: "fa-brands fa-patreon",
+      attrs: { "aria-hidden": "true" },
+    });
     const account = token
-      ? this.button(
-          localize("tavernAccountLogoutLabel"),
-          "livekit-button",
-          () => {
+      ? button({
+          label: localize("tavernAccountLogoutLabel"),
+          icon: patreonIcon,
+          onClick: () => {
             this._patreonLogout(authServer).catch((error: unknown) => {
               log.error("Error logging out of Patreon account", error);
             });
           },
-        )
-      : this.button(
-          localize("tavernAccountPatreonLabel"),
-          "livekit-button livekit-button-patreon",
-          () => {
+        })
+      : button({
+          label: localize("tavernAccountPatreonLabel"),
+          variant: "patreon",
+          icon: patreonIcon,
+          onClick: () => {
             this.patreonLogin(authServer);
             tokenInput.hidden = false;
           },
-        );
-    account.prepend(el("i", { className: "fa-brands fa-patreon" }));
+        });
     tokenInput.hidden = true;
 
     return el("div", {
@@ -909,10 +898,10 @@ export default class LiveKitAVConfig
     const debug = game.settings?.get(MODULE_NAME, "debug") ?? false;
     const devMode = game.settings?.get(MODULE_NAME, "devMode") ?? false;
 
-    const resetRoom = this.button(
-      localize("resetRoomButton"),
-      "livekit-button livekit-button-danger",
-      () => {
+    const resetRoom = button({
+      label: localize("resetRoomButton"),
+      variant: "danger",
+      onClick: () => {
         game.settings
           ?.set(MODULE_NAME, "resetRoom", true)
           .then(() => {
@@ -922,7 +911,7 @@ export default class LiveKitAVConfig
             log.error("Error resetting the meeting room", error);
           });
       },
-    );
+    });
 
     // Trace logging needs debug logging; unlock it as soon as debug is on
     const debugSwitch = this.moduleSwitch("debug");
@@ -960,13 +949,9 @@ export default class LiveKitAVConfig
             settingRow({
               label: localize("authServer"),
               hint: localize("authServerHint"),
-              control: el("input", {
-                className: "livekit-text",
-                attrs: {
-                  type: "text",
-                  name: `${MODULE_NAME}.authServer`,
-                  value: game.settings?.get(MODULE_NAME, "authServer") ?? "",
-                },
+              control: textInput({
+                name: `${MODULE_NAME}.authServer`,
+                value: game.settings?.get(MODULE_NAME, "authServer") ?? "",
               }),
             }),
         ),

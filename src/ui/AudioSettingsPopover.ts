@@ -1,18 +1,20 @@
 import type LiveKitClient from "../LiveKitClient";
 import { MODULE_NAME } from "../utils/constants";
 import { Logger } from "../utils/logger";
+import Popover from "./Popover";
+import { button } from "./buttons";
 import {
-  InputLevelMeter,
   getPushToTalkBindings,
   keybindRecorder,
   localize,
-  radioGroup,
+  segmentedControl,
   selectInput,
   setPushToTalkKey,
   settingRow,
   switchInput,
 } from "./controls";
-import { Popover, el } from "./dom";
+import { el, uniqueId } from "./dom";
+import { InputLevelMeter } from "./LevelMeter";
 
 const log = new Logger("AudioSettingsPopover");
 
@@ -34,17 +36,24 @@ export default class AudioSettingsPopover {
     return this.popover.isOpen;
   }
 
-  toggle(anchor: HTMLElement): void {
+  /**
+   * @param anchor    The element to show the popover against
+   * @param control   The button that opened the popover, if not the anchor
+   */
+  toggle(anchor: HTMLElement, control: HTMLElement = anchor): void {
     if (this.popover.isOpen) {
       this.popover.close();
     } else {
-      void this.open(anchor);
+      void this.open(anchor, control);
     }
   }
 
-  async open(anchor: HTMLElement): Promise<void> {
+  async open(
+    anchor: HTMLElement,
+    control: HTMLElement = anchor,
+  ): Promise<void> {
     await this.render();
-    this.popover.openAt(anchor);
+    this.popover.openAt(anchor, control);
     this.meter?.start(this.client);
   }
 
@@ -60,24 +69,26 @@ export default class AudioSettingsPopover {
     this.meter?.stop();
     const devices = await this.renderDevices();
 
-    const advanced = el("button", {
-      className: "livekit-link-button",
-      text: localize("advancedSettings"),
-      attrs: { type: "button" },
-    });
-    advanced.addEventListener("click", () => {
-      this.close();
-      this.client.avMaster.config
-        .render({ force: true })
-        .catch((error: unknown) => {
-          log.error("Error opening the A/V settings:", error);
-        });
+    const advanced = button({
+      label: localize("advancedSettings"),
+      variant: "link",
+      onClick: () => {
+        this.close();
+        this.client.avMaster.config
+          .render({ force: true })
+          .catch((error: unknown) => {
+            log.error("Error opening the A/V settings:", error);
+          });
+      },
     });
 
+    const titleId = uniqueId("title");
+    this.popover.element.setAttribute("aria-labelledby", titleId);
     this.popover.element.replaceChildren(
       el("h3", {
         className: "livekit-popover-title",
         text: localize("voiceSettings"),
+        attrs: { id: titleId },
       }),
       devices,
       this.renderInputMode(),
@@ -140,8 +151,9 @@ export default class AudioSettingsPopover {
     const bindings = getPushToTalkBindings();
     return this.section(
       localize("inputMode"),
-      radioGroup({
+      segmentedControl({
         name: "livekit-voice-mode",
+        label: localize("inputMode"),
         value: mode,
         options: [
           { value: "always", label: localize("inputModeVoiceActivity") },
