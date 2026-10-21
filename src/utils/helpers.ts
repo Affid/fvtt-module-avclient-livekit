@@ -57,6 +57,30 @@ export function getModuleAssetRoute(assetPath: string): string {
   return typeof getRoute === "function" ? getRoute(relative) : `/${relative}`;
 }
 
+/**
+ * Resume an AudioContext without blocking. A context created before any user
+ * interaction starts suspended, and awaiting resume() would block until the
+ * user interacts with the page, so resume in the background and again on the
+ * first interaction.
+ * @param {AudioContext} audioContext   The context to resume
+ */
+export function resumeAudioContext(audioContext: AudioContext): void {
+  if (audioContext.state !== "suspended") {
+    return;
+  }
+  const resume = () => {
+    if (audioContext.state === "suspended") {
+      audioContext.resume().catch((error: unknown) => {
+        log.warn("Unable to resume audio context:", error);
+      });
+    }
+  };
+  for (const type of ["pointerdown", "keydown"]) {
+    window.addEventListener(type, resume, { once: true, capture: true });
+  }
+  resume();
+}
+
 export function callWhenReady(fnToCall: () => unknown): void {
   if (game.ready) {
     log.debug("callWhenReady now", fnToCall);

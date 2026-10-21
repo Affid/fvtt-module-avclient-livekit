@@ -53,11 +53,30 @@ import {
 import { addContextOptions, breakout } from "./LiveKitBreakout";
 import { Logger } from "./utils/logger";
 import { getAccessToken, getTavernAccessToken } from "./utils/auth";
-import { debounceRefreshView } from "./utils/helpers";
+import { debounceRefreshView, resumeAudioContext } from "./utils/helpers";
+import VoiceControls from "./VoiceControls";
+import UserAudioMixer from "./UserAudioMixer";
+import AudioSettingsPopover from "./ui/AudioSettingsPopover";
+import CameraViewDecorator from "./ui/CameraViewDecorator";
+import UserVolumeMenu from "./ui/UserVolumeMenu";
+import VoicePanel from "./ui/VoicePanel";
 
 const log = new Logger();
 
 const NO_AUDIO_PROCESSOR = "none";
+
+/**
+ * Whether the user has ever saved a client setting of this module (rather
+ * than using its default). Client settings are kept in local storage.
+ */
+function isClientSettingStored(key: string): boolean {
+  try {
+    const storage = game.settings?.storage.get("client") as Storage | undefined;
+    return storage?.getItem(`${MODULE_NAME}.${key}`) != null;
+  } catch {
+    return true;
+  }
+}
 
 /**
  * The client-side audio processing to run on the local microphone. Krisp is
@@ -109,8 +128,17 @@ export default class LiveKitClient {
   noiseModelMenu: HTMLElement | null = null;
   noiseModelMenuDismiss: ((event: Event) => void) | null = null;
   noiseModelMenuTimeout: number | null = null;
+  noiseModelMenuAnchor: HTMLElement | null = null;
   scheduleAudioSourceChange: () => void = () => undefined;
   scheduleAudioProcessingRefresh: () => void = () => undefined;
+
+  // Discord-style interface
+  readonly voiceControls = new VoiceControls(this);
+  readonly userAudioMixer = new UserAudioMixer(this);
+  readonly cameraViewDecorator = new CameraViewDecorator(this);
+  readonly userVolumeMenu = new UserVolumeMenu(this);
+  readonly audioSettingsPopover = new AudioSettingsPopover(this);
+  private voicePanelInstance?: VoicePanel;
   breakoutRoom: string | undefined;
   connectionState: ConnectionState = ConnectionState.Disconnected;
   initState: InitState = InitState.Uninitialized;
@@ -309,7 +337,14 @@ export default class LiveKitClient {
    * enhanced noise cancellation is turned off. This may differ from the model
    * actually running (see getAudioProcessingConfig).
    */
-  private getSelectedNoiseModel(): NoiseCancellationModel | "none" {
+  getSelectedNoiseModel(): NoiseCancellationModel | "none" {
+    // Players who never picked a model use the GM's default
+    if (
+      !isClientSettingStored("enhancedNoiseCancellation") &&
+      !isClientSettingStored("noiseSuppressionModel")
+    ) {
+      return this.getDefaultNoiseModel();
+    }
     if (
       !(game.settings?.get(MODULE_NAME, "enhancedNoiseCancellation") ?? false)
     ) {
@@ -321,11 +356,21 @@ export default class LiveKitClient {
   }
 
   /**
+   * The noise cancellation model the GM chose for players who haven't picked
+   * one.
+   */
+  getDefaultNoiseModel(): NoiseCancellationModel | "none" {
+    const model = game.settings?.get(MODULE_NAME, "defaultNoiseModel");
+    return model === "none" ? "none" : toNoiseCancellationModel(model);
+  }
+
+  /**
    * Whether the Krisp noise filter can be used: the room must be connected to
    * a LiveKit Cloud server and the browser must support the filter.
    */
   isKrispAvailable(): boolean {
     return (
+      (game.settings?.get(MODULE_NAME, "allowKrisp") ?? true) &&
       this.krispSupported === true &&
       isLiveKitCloud(this.liveKitRoom, this.liveKitServerAddress)
     );
@@ -352,7 +397,7 @@ export default class LiveKitClient {
   /**
    * Localize the label for a noise cancellation model (or "none").
    */
-  private getNoiseModelLabel(model: NoiseCancellationModel | "none"): string {
+  getNoiseModelLabel(model: NoiseCancellationModel | "none"): string {
     const key = `${LANG_NAME}.noiseSuppressionModel${
       model.charAt(0).toUpperCase() + model.slice(1)
     }`;
@@ -361,31 +406,33 @@ export default class LiveKitClient {
 
   /**
    * Toggle the noise model selection menu open or closed for the given button.
+   * @param {HTMLElement} button    The button that opens the menu
+   * @param {HTMLElement} anchor    The element to show the menu above
    */
-  private toggleNoiseModelMenu(button: HTMLElement): void {
+  toggleNoiseModelMenu(button: HTMLElement, anchor = button): void {
     if (this.noiseModelMenu) {
       this.closeNoiseModelMenu();
       return;
     }
-    this.openNoiseModelMenu(button);
+    this.openNoiseModelMenu(button, anchor);
   }
 
   /**
-   * Open a popup menu anchored to the given button. The menu lets the user pick
-   * the active noise cancellation model (or "None"), toggle the audio
-   * refinements (auto gain control, echo cancellation, noise gate), adjust the
-   * noise gate threshold, and reset everything to defaults.
+   * Open a popup menu above the given anchor. The menu lets the user pick the
+   * active noise cancellation model (or "None"), toggle the audio refinements
+   * (auto gain control, echo cancellation), and reset everything to defaults.
    */
-  private openNoiseModelMenu(button: HTMLElement): void {
+  private openNoiseModelMenu(button: HTMLElement, anchor: HTMLElement): void {
     this.closeNoiseModelMenu();
 
     const menu = document.createElement("div");
     menu.className = "livekit-noise-menu";
     document.body.append(menu);
     this.noiseModelMenu = menu;
+    this.noiseModelMenuAnchor = anchor;
 
     this.renderNoiseMenuContent(menu, button);
-    this.positionNoiseMenu(menu, button);
+    this.positionNoiseMenu(menu, anchor);
 
     // Close the menu when clicking anywhere outside of it or the button
     this.noiseModelMenuDismiss = (dismissEvent: Event) => {
@@ -477,6 +524,51 @@ export default class LiveKitClient {
   }
 
   /**
+   * The noise cancellation models to offer, with their labels and whether
+   * they can be selected. Krisp is only offered on LiveKit Cloud, but is still
+   * listed (as unavailable) if it is the saved selection.
+   */
+  getNoiseModelOptions(): {
+    model: NoiseCancellationModel | "none";
+    label: string;
+    detail?: string;
+    selectable: boolean;
+    selected: boolean;
+  }[] {
+    const currentModel = this.getSelectedNoiseModel();
+    const isCloud = isLiveKitCloud(this.liveKitRoom, this.liveKitServerAddress);
+    const models: (NoiseCancellationModel | "none")[] = [
+      "none",
+      "speex",
+      "rnnoise",
+      "gtcrn",
+    ];
+    if (isCloud || currentModel === "krisp") {
+      models.push("krisp");
+    }
+    return models.map((model) => {
+      let detail: string | undefined;
+      if (
+        model === "krisp" &&
+        !(game.settings?.get(MODULE_NAME, "allowKrisp") ?? true)
+      ) {
+        detail = game.i18n?.localize(`${LANG_NAME}.krispDisabledByGM`);
+      } else if (model === "krisp" && !isCloud) {
+        detail = game.i18n?.localize(`${LANG_NAME}.krispRequiresCloud`);
+      } else if (model === "krisp" && this.krispSupported === false) {
+        detail = game.i18n?.localize(`${LANG_NAME}.krispUnsupported`);
+      }
+      return {
+        model,
+        label: this.getNoiseModelLabel(model),
+        detail,
+        selectable: detail === undefined,
+        selected: model === currentModel,
+      };
+    });
+  }
+
+  /**
    * (Re)build the contents of the noise menu to reflect the current settings.
    * Rebuilding replaces all child nodes, so the event listeners attached to the
    * previous nodes are released for garbage collection.
@@ -484,16 +576,16 @@ export default class LiveKitClient {
   private renderNoiseMenuContent(menu: HTMLElement, button: HTMLElement): void {
     menu.replaceChildren();
 
-    const currentModel = this.getSelectedNoiseModel();
     const krispActive = this.getAudioProcessingConfig().model === "krisp";
 
-    // Refresh helper: rebuild + reposition + update the control-bar button
+    // Refresh helper: rebuild + reposition + update the buttons
     const refresh = () => {
       if (this.noiseModelMenu === menu) {
         this.renderNoiseMenuContent(menu, button);
-        this.positionNoiseMenu(menu, button);
+        this.positionNoiseMenu(menu, this.noiseModelMenuAnchor ?? button);
       }
       this.updateNoiseModelButton(button);
+      this.onVoiceStateChanged();
     };
 
     const appendSection = (className: string, text?: string) => {
@@ -512,35 +604,18 @@ export default class LiveKitClient {
         "Noise Cancellation",
     );
 
-    // Model options. Krisp is only offered on LiveKit Cloud, but is still
-    // listed (as unavailable) if it is the saved selection.
-    const isCloud = isLiveKitCloud(this.liveKitRoom, this.liveKitServerAddress);
-    const models: (NoiseCancellationModel | "none")[] = [
-      "none",
-      "speex",
-      "rnnoise",
-      "gtcrn",
-    ];
-    if (isCloud || currentModel === "krisp") {
-      models.push("krisp");
-    }
-    for (const option of models) {
-      let detail: string | undefined;
-      if (option === "krisp" && !isCloud) {
-        detail = game.i18n?.localize(`${LANG_NAME}.krispRequiresCloud`);
-      } else if (option === "krisp" && this.krispSupported === false) {
-        detail = game.i18n?.localize(`${LANG_NAME}.krispUnsupported`);
-      }
+    // Model options. Unavailable options can't be picked, but stay visible
+    // when selected.
+    for (const option of this.getNoiseModelOptions()) {
       const item = this.createNoiseMenuItem(
-        option === currentModel ? "fa-check" : "",
-        this.getNoiseModelLabel(option),
-        // Unavailable options can't be picked, but stay visible when selected
-        detail === undefined || option === currentModel
-          ? () => this.selectNoiseModel(option).then(refresh)
+        option.selected ? "fa-check" : "",
+        option.label,
+        option.selectable || option.selected
+          ? () => this.selectNoiseModel(option.model).then(refresh)
           : null,
-        detail,
+        option.detail,
       );
-      item.classList.toggle("active", option === currentModel);
+      item.classList.toggle("active", option.selected);
       menu.append(item);
     }
 
@@ -552,18 +627,17 @@ export default class LiveKitClient {
     );
 
     // Refinement toggles. These apply whether or not a model is selected,
-    // except auto gain control and the noise gate, which are not used while
-    // Krisp is active.
+    // except auto gain control, which is not used while Krisp is active. The
+    // noise gate is in the voice settings, as the input sensitivity.
     const krispDisabledDetail = game.i18n?.localize(
       `${LANG_NAME}.krispRefinementDisabled`,
     );
     const toggles: {
-      key: "audioAutoGainControl" | "audioEchoCancellation" | "audioNoiseGate";
+      key: "audioAutoGainControl" | "audioEchoCancellation";
       disabled: boolean;
     }[] = [
       { key: "audioAutoGainControl", disabled: krispActive },
       { key: "audioEchoCancellation", disabled: false },
-      { key: "audioNoiseGate", disabled: krispActive },
     ];
     for (const { key, disabled } of toggles) {
       const value = game.settings?.get(MODULE_NAME, key) ?? false;
@@ -579,49 +653,6 @@ export default class LiveKitClient {
       item.classList.toggle("active", value && !disabled);
       menu.append(item);
     }
-
-    // Noise gate threshold slider (disabled unless the gate is in use)
-    const sliderDisabled =
-      krispActive ||
-      !(game.settings?.get(MODULE_NAME, "audioNoiseGate") ?? false);
-    const thresholdValue =
-      game.settings?.get(MODULE_NAME, "audioNoiseGateThreshold") ?? -50;
-    const thresholdName =
-      game.i18n?.localize(`${LANG_NAME}.audioNoiseGateThreshold`) ??
-      "Noise Gate Threshold (dB)";
-
-    const sliderRow = document.createElement("div");
-    sliderRow.className = "livekit-noise-menu-slider";
-    sliderRow.classList.toggle("disabled", sliderDisabled);
-
-    const sliderLabel = document.createElement("span");
-    sliderLabel.className = "livekit-noise-menu-slider-label";
-    sliderLabel.textContent = `${thresholdName}: ${thresholdValue.toString()}`;
-    sliderRow.append(sliderLabel);
-
-    const slider = document.createElement("input");
-    slider.type = "range";
-    slider.min = "-80";
-    slider.max = "0";
-    slider.step = "1";
-    slider.value = thresholdValue.toString();
-    slider.disabled = sliderDisabled;
-    slider.addEventListener("input", () => {
-      sliderLabel.textContent = `${thresholdName}: ${slider.value}`;
-    });
-    slider.addEventListener("change", () => {
-      game.settings
-        ?.set(MODULE_NAME, "audioNoiseGateThreshold", Number(slider.value))
-        .catch((error: unknown) => {
-          log.error("Error setting audioNoiseGateThreshold:", error);
-        });
-    });
-    // Keep the outside-click dismiss from firing while dragging the slider
-    slider.addEventListener("pointerdown", (event) => {
-      event.stopPropagation();
-    });
-    sliderRow.append(slider);
-    menu.append(sliderRow);
 
     // Divider + reset to defaults
     appendSection("livekit-noise-menu-divider");
@@ -657,13 +688,14 @@ export default class LiveKitClient {
       this.noiseModelMenu.remove();
       this.noiseModelMenu = null;
     }
+    this.noiseModelMenuAnchor = null;
   }
 
   /**
    * Apply a noise model selection. Selecting "none" disables enhanced noise
    * cancellation; selecting a model enables it and sets the active model.
    */
-  private async selectNoiseModel(
+  async selectNoiseModel(
     model: NoiseCancellationModel | "none",
   ): Promise<void> {
     if (model === "none") {
@@ -685,17 +717,53 @@ export default class LiveKitClient {
    * settings' onChange handlers coalesce into a single debounced refresh.
    */
   private async resetNoiseSettings(): Promise<void> {
-    await game.settings?.set(MODULE_NAME, "enhancedNoiseCancellation", true);
-    await game.settings?.set(
-      MODULE_NAME,
-      "noiseSuppressionModel",
-      DEFAULT_NOISE_SUPPRESSION_MODEL,
-    );
+    await this.selectNoiseModel(this.getDefaultNoiseModel());
     await game.settings?.set(MODULE_NAME, "audioAutoGainControl", true);
     await game.settings?.set(MODULE_NAME, "audioEchoCancellation", true);
     await game.settings?.set(MODULE_NAME, "audioNoiseSuppression", true);
     await game.settings?.set(MODULE_NAME, "audioNoiseGate", false);
     await game.settings?.set(MODULE_NAME, "audioNoiseGateThreshold", -50);
+  }
+
+  /**
+   * The Discord-style voice panel. It is created on first use, once Foundry's
+   * localization is available.
+   */
+  get voicePanel(): VoicePanel {
+    this.voicePanelInstance ??= new VoicePanel(this);
+    return this.voicePanelInstance;
+  }
+
+  /**
+   * Turn the Discord-style interface on or off to match its setting.
+   */
+  applyDiscordStyle(): void {
+    const enabled =
+      (game.settings?.get(MODULE_NAME, "allowDiscordStyleUI") ?? true) &&
+      (game.settings?.get(MODULE_NAME, "discordStyleUI") ?? true) &&
+      !this.useExternalAV;
+    document.body.classList.toggle("livekit-discord-ui", enabled);
+    if (!enabled) {
+      this.userVolumeMenu.close();
+      this.audioSettingsPopover.close();
+    }
+    this.voicePanel.sync();
+    this.cameraViewDecorator.refreshAll();
+  }
+
+  /**
+   * Refresh the interface after a user's voice state changed (mute, deafen,
+   * tracks, noise suppression). Without a user, everyone is refreshed.
+   */
+  onVoiceStateChanged(userId?: string): void {
+    if (userId) {
+      this.userAudioMixer.apply(userId);
+      this.cameraViewDecorator.refresh(userId);
+    } else {
+      this.userAudioMixer.applyAll();
+      this.cameraViewDecorator.refreshAll();
+    }
+    this.voicePanelInstance?.update();
   }
 
   addConnectionQualityIndicator(userId: string): void {
@@ -799,6 +867,9 @@ export default class LiveKitClient {
     }
     audioElement.volume = userVolume;
     audioElement.muted = this.settings.get("client", "muteAll") === true;
+
+    // Apply the per-user volume, local mute, and deafen state
+    this.userAudioMixer.apply(userId);
   }
 
   attachVideoTrack(
@@ -1140,32 +1211,16 @@ export default class LiveKitClient {
    * 48kHz context works for all of them. It is intentionally kept alive between
    * tracks and is not closed by the processors themselves.
    */
-  private getAudioProcessorContext(): AudioContext {
+  getAudioProcessorContext(): AudioContext {
     if (
       !this.audioProcessorContext ||
       this.audioProcessorContext.state === "closed"
     ) {
-      const audioContext = new AudioContext({
+      this.audioProcessorContext = new AudioContext({
         sampleRate: NOISE_SUPPRESSION_SAMPLE_RATE,
       });
-      this.audioProcessorContext = audioContext;
-
-      // A context created before any user interaction starts suspended, and
-      // awaiting resume() would block until the user interacts with the page.
-      // Resume in the background instead; audio flows once it is running.
-      if (audioContext.state === "suspended") {
-        const resume = () => {
-          if (audioContext.state === "suspended") {
-            audioContext.resume().catch((error: unknown) => {
-              log.warn("Unable to resume audio processor context:", error);
-            });
-          }
-        };
-        for (const type of ["pointerdown", "keydown"]) {
-          window.addEventListener(type, resume, { once: true, capture: true });
-        }
-        resume();
-      }
+      // Audio flows once the context is running
+      resumeAudioContext(this.audioProcessorContext);
     }
     return this.audioProcessorContext;
   }
@@ -1479,10 +1534,18 @@ export default class LiveKitClient {
       await this.checkKrispSupport();
     }
     await this.refreshAudioProcessing();
+
+    // Let everyone know if we are deafened
+    if (this.voiceControls.isDeafened()) {
+      this.voiceControls.broadcastDeafened();
+    }
   }
 
   onConnectionQualityChanged(quality: string, participant: Participant) {
     log.debug("onConnectionQualityChanged:", quality, participant);
+    if (participant === this.liveKitRoom?.localParticipant) {
+      this.voicePanelInstance?.update();
+    }
 
     if (!game.settings?.get(MODULE_NAME, "displayConnectionQuality")) {
       // Connection quality indicator is not enabled
@@ -1514,6 +1577,7 @@ export default class LiveKitClient {
 
     // Clear the participant map
     this.liveKitParticipants.clear();
+    this.userAudioMixer.stopAll();
 
     // Set connection buttons state
     this.setConnectionButtons(false);
@@ -1543,6 +1607,10 @@ export default class LiveKitClient {
       // @ts-expect-error - ui.webrtc.setUserIsSpeaking is not in foundry-vtt-types yet
       // eslint-disable-next-line @typescript-eslint/no-unsafe-call
       ui.webrtc?.setUserIsSpeaking(userId, speaking);
+      this.cameraViewDecorator.setSpeaking(userId, speaking);
+      if (userId === game.user?.id) {
+        this.voicePanelInstance?.setSpeaking(speaking);
+      }
     }
   }
 
@@ -1588,6 +1656,11 @@ export default class LiveKitClient {
     // Set up remote participant callbacks
     this.setRemoteParticipantCallbacks(participant);
 
+    // Let the new participant know if we are deafened
+    if (this.voiceControls.isDeafened()) {
+      this.voiceControls.broadcastDeafened();
+    }
+
     // Call a debounced render
     this.render();
   }
@@ -1626,6 +1699,7 @@ export default class LiveKitClient {
     log.info("Reconnect issued");
     // Re-render just in case users changed
     this.render();
+    this.voicePanelInstance?.update();
   }
 
   onReconnecting(): void {
@@ -1634,6 +1708,7 @@ export default class LiveKitClient {
       game.i18n?.localize("WEBRTC.ConnectionLostWarning") ??
         "ConnectionLostWarning",
     );
+    this.voicePanelInstance?.update();
   }
 
   onSocketEvent(message: SocketMessage, userId: string): void {
@@ -1674,6 +1749,9 @@ export default class LiveKitClient {
           log.warn("Disconnect socket event from non-GM user; ignoring");
         }
         break;
+      case "deafen":
+        this.voiceControls.onRemoteDeafened(userId, message.deafened === true);
+        break;
       case "render":
         // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
         if (game.users?.get(userId)?.isGM) {
@@ -1692,6 +1770,14 @@ export default class LiveKitClient {
     participant: Participant,
   ): void {
     log.debug("onTrackMuteChanged:", publication, participant);
+
+    const mutedUserId =
+      participant === this.liveKitRoom?.localParticipant
+        ? game.user?.id
+        : this.getParticipantFVTTUser(participant)?.id;
+    if (mutedUserId) {
+      this.onVoiceStateChanged(mutedUserId);
+    }
 
     // Local participant
     if (participant === this.liveKitRoom?.localParticipant) {
@@ -1741,6 +1827,8 @@ export default class LiveKitClient {
     _cameraviews: foundry.applications.apps.av.CameraViews,
     html: HTMLElement,
   ): void {
+    this.decorateCameraViews(html);
+
     const userId = game.user?.id;
     if (!userId) {
       log.error("No user ID found; cannot render camera views");
@@ -1760,6 +1848,14 @@ export default class LiveKitClient {
     }
     this.addConnectionButtons(element);
     this.addNoiseCancellationButton(element);
+  }
+
+  /**
+   * Add the Discord-style decorations after every camera dock render.
+   */
+  private decorateCameraViews(html: HTMLElement): void {
+    this.applyDiscordStyle();
+    this.cameraViewDecorator.decorate(html);
   }
 
   onTrackSubscribed(
@@ -1815,6 +1911,7 @@ export default class LiveKitClient {
     }
 
     debounceRefreshView(fvttUserId);
+    this.onVoiceStateChanged(fvttUserId);
   }
 
   onTrackUnSubscribed(
@@ -1824,6 +1921,10 @@ export default class LiveKitClient {
   ): void {
     log.debug("onTrackUnSubscribed:", track, publication, participant);
     track.detach();
+    const fvttUserId = this.getParticipantFVTTUser(participant)?.id;
+    if (fvttUserId) {
+      this.onVoiceStateChanged(fvttUserId);
+    }
   }
 
   /**
@@ -1846,15 +1947,12 @@ export default class LiveKitClient {
       log.warn("Volume change event did not originate from a camera view box");
       return;
     }
-    const audioElements: HTMLCollection = box.getElementsByTagName("audio");
-    for (const audioElement of audioElements) {
-      if (audioElement instanceof HTMLAudioElement) {
-        audioElement.volume = volume;
-      }
-    }
-
-    // HACK: Needed to fix a bug in FVTT v13
     if (box.dataset.user) {
+      // Foundry's slider goes up to 100%; this also replaces a higher volume
+      // set from the user's right-click menu
+      this.userAudioMixer.setVolume(box.dataset.user, volume);
+
+      // HACK: Needed to fix a bug in FVTT v13
       this.settings.set("client", `users.${box.dataset.user}.volume`, volume);
     }
   }
@@ -1965,6 +2063,7 @@ export default class LiveKitClient {
       disconnectButton?.classList.toggle("hidden", !connected);
       disconnectButton?.classList.toggle("disabled", false);
     }
+    this.voicePanelInstance?.update();
   }
 
   setConnectionQualityIndicator(userId: string, quality?: string): void {

@@ -1,5 +1,17 @@
 # LiveKit A/V Client for FoundryVTT: Changelog
 
+## 0.6.8-krisp.2
+
+- Add a Discord-style interface (on by default; turn it off with the "Discord-style interface" setting):
+  - A voice panel above the player list with connection status and ping, disconnect, mute, deafen, noise suppression, and voice settings. Drag it by its status row to move it.
+  - Deafen mutes everyone else and your microphone; other users see that you are deafened.
+  - Camera views show a green ring around whoever is speaking, the user's avatar while their camera is off, and mute/deafen badges.
+  - Right-click another user's camera view to set their volume from 0% to 200%, or mute them just for yourself.
+  - Voice settings: input and output devices, voice activity or push to talk (with the shortcut), input sensitivity with a live level meter, and noise suppression.
+- The noise gate is now set as the input sensitivity in the voice settings.
+- New A/V Settings window in the same style, for players and the GM, replacing Foundry's A/V configuration: a sidebar with the player's own settings (voice, noise & quality, video, appearance, advanced) and the GM's world settings (server, player options, troubleshooting), saved from an "unsaved changes" bar. The module's settings no longer clutter Foundry's module settings list, which links to this window instead.
+- GM player options: allow the Discord-style interface, allow Krisp, and choose the default noise cancellation model for players who haven't picked one.
+
 ## 0.6.8-krisp.1
 
 - Add **Krisp** as a noise cancellation model when connected to a LiveKit Cloud server (via `@livekit/krisp-noise-filter`). It is only offered on LiveKit Cloud with a supported browser; otherwise, or if it fails to start, the default open-source model is used instead. Auto gain control and the noise gate are not used while Krisp is active.

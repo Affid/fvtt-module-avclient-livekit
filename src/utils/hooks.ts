@@ -19,6 +19,17 @@ Hooks.on("init", () => {
   // Register module settings
   registerModuleSettings();
 
+  // The module's settings are all in the A/V settings window; link to it from
+  // Foundry's module settings list
+  game.settings?.registerMenu(MODULE_NAME, "avSettings", {
+    name: "LIVEKITAVCLIENT.settingsMenu",
+    label: "LIVEKITAVCLIENT.settingsMenuLabel",
+    hint: "LIVEKITAVCLIENT.settingsMenuHint",
+    icon: "fa-solid fa-headset",
+    type: LiveKitAVConfig,
+    restricted: false,
+  });
+
   // Add renderCameraViews hook after init
   Hooks.on("renderCameraViews", (cameraViews, cameraViewsElement) => {
     if (game.webrtc?.client._liveKitClient) {

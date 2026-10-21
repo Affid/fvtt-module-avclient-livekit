@@ -89,6 +89,38 @@ By default, debug logs are disabled. If additional logs are needed for troublesh
 
 See [CHANGELOG](/CHANGELOG.md)
 
+## Discord-style interface
+
+By default, the module adds a Discord-style voice panel above the player list:
+connection status and ping, a disconnect button, and buttons to mute, deafen,
+choose the noise cancellation model, and open the voice settings (devices,
+voice activity or push to talk, input sensitivity with a live level meter).
+Drag the panel by its status row to move it.
+
+Camera views get a green ring around whoever is speaking, show the user's
+avatar while their camera is off, and show when a user is muted or deafened.
+Right-click another user's camera view to change their volume (up to 200%) or
+mute them just for yourself.
+
+Turn this off under A/V Settings → Appearance. The GM can turn it off for
+everyone under A/V Settings → Player Options.
+
+## Settings
+
+All audio/video settings are in one A/V Settings window, opened from Foundry's
+"Configure Audio/Video" button, the voice panel, or the module's entry in
+Foundry's module settings list:
+
+- **My settings** (everyone): voice (devices, voice activity or push to talk,
+  input sensitivity), noise & quality, video, appearance (Discord-style
+  interface, camera dock, nameplates), and advanced options.
+- **World** (GM only): the A/V mode and LiveKit server, player options (allow
+  the Discord-style interface and Krisp, and the default noise cancellation
+  model for players who haven't picked one), and troubleshooting (reset the
+  meeting room, logging).
+
+Changes are saved together from the bar at the bottom of the window.
+
 ## Noise cancellation
 
 Click the wand button in your camera controls to choose a noise cancellation

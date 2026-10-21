@@ -1,5 +1,0 @@
-<section class="tab {{#if tab.active}} active{{/if}}" data-group="{{tab.group}}" data-tab="{{tab.id}}">
-  {{#each liveKitSettings as |liveKitSetting|}}
-    {{formGroup liveKitSetting.field value=liveKitSetting.value localize=true}}
-  {{/each}}
-</section>
