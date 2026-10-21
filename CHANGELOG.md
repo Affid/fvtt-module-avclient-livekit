@@ -1,5 +1,18 @@
 # LiveKit A/V Client for FoundryVTT: Changelog
 
+## 0.6.8-krisp.6
+
+- A Discord-style camera dock replaces Foundry's when the Discord-style interface is on (switching the interface now reloads Foundry):
+  - Each user's tile shows their video, or their avatar while their camera is off, a green ring while they speak, their name, and badges when they are muted, deafened, muted by you, or have their camera off. Hover a tile for its connection quality.
+  - Layouts: a grid; one user in focus with the others in a strip (click a tile to focus it, or let the focus follow whoever speaks); or a compact list of avatars like a Discord voice channel.
+  - Dock it on any side of the screen and resize it from its inner edge, or let it float, dragged by its header and resized by its corner. Collapse it to a slim bar of avatars. All from the button in the dock's header, and remembered on your computer.
+  - Hover your own tile to mute yourself or turn your camera on or off.
+  - Right-click (or Shift+F10 on) another user's tile: volume up to 200%, mute for me, hide video for me, focus, pop out into a window of its own, picture-in-picture, and hide from the dock. The GM can also block a user's audio or video and use the breakout rooms from there.
+  - Foundry's dock position and width, collapsing, nameplates, player color borders, popped out and hidden users still apply.
+  - The A/V Settings window has a "Discord-style dock" group: layout, follow the speaker, and floating.
+- Other users' audio no longer stops when their camera view re-renders, is hidden, or moves; it plays from elements of its own. Users hidden from the dock are not heard, as before.
+- Audio and video from users who join start playing as soon as they arrive, rather than after the next re-render of the dock.
+
 ## 0.6.8-krisp.5
 
 - Input sensitivity like Discord. In Voice Activity mode your microphone is only sent while you speak:
