@@ -3,9 +3,8 @@
 [![Join our Discord](https://img.shields.io/discord/909201876740890694?color=5865F2&logo=discord&logoColor=white)](https://discord.gg/Tcp9JtbpC5)
 [![Become a Patron](https://img.shields.io/badge/support-patreon-orange.svg?logo=patreon)](https://tavern.at/patreon)
 [![Donate via Ko-Fi](https://img.shields.io/badge/donate-ko--fi-red.svg?logo=ko-fi)](https://ko-fi.com/bekit)
-[![Latest Version](https://img.shields.io/github/v/tag/bekriebel/fvtt-module-avclient-livekit?label=version)](https://github.com/bekriebel/fvtt-module-avclient-livekit/releases)
-[![Build Status](https://img.shields.io/github/actions/workflow/status/bekriebel/fvtt-module-avclient-livekit/release-fvtt-module.yml?branch=main)](https://github.com/bekriebel/fvtt-module-avclient-livekit/actions/workflows/release-fvtt-module.yml)
-[![Download Count](https://img.shields.io/github/downloads/bekriebel/fvtt-module-avclient-livekit/latest/fvtt-module-avclient-livekit.zip)](https://github.com/bekriebel/fvtt-module-avclient-livekit/releases)
+[![Latest Version](https://img.shields.io/github/v/release/Affid/fvtt-module-avclient-livekit?label=version)](https://github.com/Affid/fvtt-module-avclient-livekit/releases)
+[![Download Count](https://img.shields.io/github/downloads/Affid/fvtt-module-avclient-livekit/latest/module.zip)](https://github.com/Affid/fvtt-module-avclient-livekit/releases)
 
 ## About
 
@@ -25,7 +24,9 @@ A replacement for the native SimplePeer / EasyRTC A/V client in FoundryVTT. The 
 
 ## Installation
 
-You can install this module by using the following manifest URL: <https://github.com/bekriebel/fvtt-module-avclient-livekit/releases/latest/download/module.json>
+You can install this module by using the following manifest URL: <https://github.com/Affid/fvtt-module-avclient-livekit/releases/latest/download/module.json>
+
+This is a fork of [bekriebel/fvtt-module-avclient-livekit](https://github.com/bekriebel/fvtt-module-avclient-livekit) that adds selectable noise cancellation models, including Krisp on LiveKit Cloud. See [RELEASING](/RELEASING.md) for how releases of this fork are published.
 
 ## Configuration
 
@@ -87,3 +88,25 @@ By default, debug logs are disabled. If additional logs are needed for troublesh
 ## Changelog
 
 See [CHANGELOG](/CHANGELOG.md)
+
+## Noise cancellation
+
+Click the wand button in your camera controls to choose a noise cancellation
+model. The open-source models (GTCRN, RNNoise, and Speex) run entirely in your
+browser and work with any LiveKit server.
+
+When connected to a [LiveKit Cloud](https://livekit.io/cloud) server, **Krisp**
+is also offered. It is LiveKit's noise filter: it requires a supported browser
+(older Safari versions are not), and the browser downloads its models from
+`integrations.livekit.io`. If Krisp is not available or fails to start, the
+default open-source model is used instead. Auto gain control and the noise
+gate are not used while Krisp is active.
+
+## Third-party notices
+
+The enhanced noise cancellation feature bundles open-source models
+(RNNoise, Speex, and GTCRN) via
+[`@sapphi-red/web-noise-suppressor`](https://github.com/sapphi-red/web-noise-suppressor),
+and LiveKit's [`@livekit/krisp-noise-filter`](https://www.npmjs.com/package/@livekit/krisp-noise-filter).
+See [THIRD-PARTY-NOTICES](/THIRD-PARTY-NOTICES.md) for their licenses and
+attributions.

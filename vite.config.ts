@@ -15,6 +15,15 @@ export default defineConfig({
       fileName: "avclient-livekit",
       formats: ["es"],
     },
+    rolldownOptions: {
+      output: {
+        // Name the lazily loaded Krisp chunk clearly instead of "dist-<hash>"
+        chunkFileNames: (chunk) =>
+          chunk.moduleIds.some((id) => id.includes("krisp-noise-filter"))
+            ? "krisp-noise-filter-[hash].js"
+            : "[name]-[hash].js",
+      },
+    },
     sourcemap: true,
   },
   plugins: [
@@ -34,6 +43,10 @@ export default defineConfig({
         },
         {
           src: "LICENSE*",
+          dest: "",
+        },
+        {
+          src: "THIRD-PARTY-NOTICES.md",
           dest: "",
         },
         {
