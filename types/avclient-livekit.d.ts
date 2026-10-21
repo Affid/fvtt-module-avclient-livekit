@@ -78,6 +78,17 @@ declare global {
     "avclient-livekit.discordStyleUI": foundry.data.fields.BooleanField<{
       initial: true;
     }>;
+    "avclient-livekit.allowDiscordStyleUI": foundry.data.fields.BooleanField<{
+      initial: true;
+    }>;
+    "avclient-livekit.allowKrisp": foundry.data.fields.BooleanField<{
+      initial: true;
+    }>;
+    "avclient-livekit.defaultNoiseModel": foundry.data.fields.StringField<{
+      required: true;
+      blank: false;
+      initial: string;
+    }>;
     "avclient-livekit.voicePanelPosition": { left: number; top: number } | null;
     "avclient-livekit.userVolumes": Record<string, number | undefined>;
     "avclient-livekit.userLocalMutes": Record<string, boolean | undefined>;

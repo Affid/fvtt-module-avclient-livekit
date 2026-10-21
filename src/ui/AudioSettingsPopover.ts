@@ -1,46 +1,32 @@
 import type LiveKitClient from "../LiveKitClient";
-import { LANG_NAME, MODULE_NAME } from "../utils/constants";
+import { MODULE_NAME } from "../utils/constants";
 import { Logger } from "../utils/logger";
-import { Popover, clamp, el } from "./dom";
+import {
+  InputLevelMeter,
+  getPushToTalkBindings,
+  keybindRecorder,
+  localize,
+  radioGroup,
+  selectInput,
+  setPushToTalkKey,
+  settingRow,
+  switchInput,
+} from "./controls";
+import { Popover, el } from "./dom";
 
 const log = new Logger("AudioSettingsPopover");
 
-// The input level range shown by the sensitivity meter, in dBFS
-const METER_MIN_DB = -80;
-const METER_MAX_DB = 0;
-
-interface KeyBinding {
-  key: string;
-  modifiers?: string[];
-}
-
-interface Keybindings {
-  actions: Map<string, unknown>;
-  get(namespace: string, action: string): KeyBinding[];
-  set(namespace: string, action: string, bindings: KeyBinding[]): Promise<void>;
-}
-
-const localize = (key: string) =>
-  game.i18n?.localize(`${LANG_NAME}.${key}`) ?? key;
-
 /**
- * A Discord-style voice settings popover: input/output devices, input mode
+ * Quick voice settings from the voice panel: input/output devices, input mode
  * (voice activity or push to talk), input sensitivity with a live level
- * meter, and noise suppression.
+ * meter, and noise suppression. Changes apply immediately. Everything else is
+ * in the A/V settings window, linked from the footer.
  */
 export default class AudioSettingsPopover {
   private readonly popover = new Popover("livekit-audio-settings", () => {
-    this.stopMeter();
+    this.meter?.stop();
   });
-  private meter?: {
-    track: MediaStreamTrack;
-    source: MediaStreamAudioSourceNode;
-    analyser: AnalyserNode;
-    frame: number;
-  };
-  private meterFill?: HTMLElement;
-  private meterThreshold = METER_MIN_DB;
-  private stopRecordingKey?: () => void;
+  private meter?: InputLevelMeter;
 
   constructor(private readonly client: LiveKitClient) {}
 
@@ -59,7 +45,7 @@ export default class AudioSettingsPopover {
   async open(anchor: HTMLElement): Promise<void> {
     await this.render();
     this.popover.openAt(anchor);
-    this.startMeter();
+    this.meter?.start(this.client);
   }
 
   close(): void {
@@ -67,16 +53,12 @@ export default class AudioSettingsPopover {
   }
 
   /**
-   * Rebuild the content, e.g. after a setting changed elsewhere.
+   * Rebuild the content, e.g. after a setting changed.
    */
   async render(): Promise<void> {
-    this.stopRecordingKey?.();
-    const sections = await Promise.all([
-      this.renderDevices(),
-      Promise.resolve(this.renderInputMode()),
-      Promise.resolve(this.renderSensitivity()),
-      Promise.resolve(this.renderNoiseSuppression()),
-    ]);
+    const wasMetering = this.popover.isOpen;
+    this.meter?.stop();
+    const devices = await this.renderDevices();
 
     const advanced = el("button", {
       className: "livekit-link-button",
@@ -97,13 +79,19 @@ export default class AudioSettingsPopover {
         className: "livekit-popover-title",
         text: localize("voiceSettings"),
       }),
-      ...sections,
+      devices,
+      this.renderInputMode(),
+      this.renderSensitivity(),
+      this.renderNoiseSuppression(),
       el("footer", {
         className: "livekit-popover-footer",
         children: [advanced],
       }),
     );
     this.popover.reposition();
+    if (wasMetering) {
+      this.meter?.start(this.client);
+    }
   }
 
   private section(title: string, ...children: (Node | false)[]): HTMLElement {
@@ -124,33 +112,21 @@ export default class AudioSettingsPopover {
     const deviceSelect = (
       setting: "audioSrc" | "audioSink",
       devices: Record<string, string>,
-    ) => {
-      const current = this.client.settings.client[setting];
-      const options = { ...devices };
-      if (current && !(current in options)) {
-        options[current] =
-          current === "disabled" ? localize("deviceDisabled") : current;
-      }
-      const select = el("select", {
-        className: "livekit-select",
-        attrs: { "aria-label": localize(setting) },
-        children: Object.entries(options).map(([id, label]) => {
-          const option = el("option", { text: label, attrs: { value: id } });
-          option.selected = id === current;
-          return option;
+    ) =>
+      settingRow({
+        label: localize(setting),
+        control: selectInput({
+          label: localize(setting),
+          options: deviceOptions(devices, this.client.settings.client[setting]),
+          value: this.client.settings.client[setting],
+          onChange: (value) => {
+            this.client.settings.set("client", setting, value);
+            if (setting === "audioSink") {
+              this.client.userAudioMixer.applyAll();
+            }
+          },
         }),
       });
-      select.addEventListener("change", () => {
-        this.client.settings.set("client", setting, select.value);
-        if (setting === "audioSink") {
-          this.client.userAudioMixer.applyAll();
-        }
-      });
-      return el("label", {
-        className: "livekit-field",
-        children: [el("span", { text: localize(setting) }), select],
-      });
-    };
 
     return this.section(
       localize("devices"),
@@ -160,145 +136,79 @@ export default class AudioSettingsPopover {
   }
 
   private renderInputMode(): HTMLElement {
-    const mode = this.client.settings.get("client", "voice.mode");
-    const radio = (value: "always" | "ptt", label: string) => {
-      const input = el("input", {
-        attrs: { type: "radio", name: "livekit-voice-mode", value },
-      });
-      input.checked = mode === value;
-      input.addEventListener("change", () => {
-        this.client.settings.set("client", "voice.mode", value);
-        void this.render();
-      });
-      return el("label", {
-        className: "livekit-radio",
-        children: [input, el("span", { text: label })],
-      });
-    };
-
+    const mode = this.client.settings.client.voice.mode;
+    const bindings = getPushToTalkBindings();
     return this.section(
       localize("inputMode"),
-      radio("always", localize("inputModeVoiceActivity")),
-      radio("ptt", localize("inputModePushToTalk")),
-      mode === "ptt" && this.renderPushToTalkKey(),
-    );
-  }
-
-  private renderPushToTalkKey(): HTMLElement | false {
-    const keybindings = game.keybindings as unknown as Keybindings | undefined;
-    if (!keybindings?.actions.has("core.pushToTalk")) {
-      return false;
-    }
-    const bindings = keybindings.get("core", "pushToTalk");
-    const shortcut =
-      bindings
-        .map((binding) =>
-          [...(binding.modifiers ?? []), keyDisplayName(binding.key)].join(
-            " + ",
-          ),
-        )
-        .join(", ") || localize("pushToTalkUnbound");
-
-    const button = el("button", {
-      className: "livekit-keybind",
-      text: shortcut,
-      attrs: { type: "button" },
-    });
-    button.addEventListener("click", () => {
-      button.textContent = localize("pushToTalkRecord");
-      button.classList.add("recording");
-      const onKeyDown = (event: KeyboardEvent) => {
-        event.preventDefault();
-        event.stopPropagation();
-        this.stopRecordingKey?.();
-        if (event.code === "Escape") {
+      radioGroup({
+        name: "livekit-voice-mode",
+        value: mode,
+        options: [
+          { value: "always", label: localize("inputModeVoiceActivity") },
+          { value: "ptt", label: localize("inputModePushToTalk") },
+        ],
+        onChange: (value) => {
+          this.client.settings.set("client", "voice.mode", value);
           void this.render();
-          return;
-        }
-        keybindings
-          .set("core", "pushToTalk", [{ key: event.code, modifiers: [] }])
-          .then(() => this.render())
-          .catch((error: unknown) => {
-            log.error("Error setting the push to talk key:", error);
-          });
-      };
-      window.addEventListener("keydown", onKeyDown, { capture: true });
-      this.stopRecordingKey = () => {
-        window.removeEventListener("keydown", onKeyDown, { capture: true });
-        this.stopRecordingKey = undefined;
-      };
-    });
-
-    return el("div", {
-      className: "livekit-field livekit-field-inline",
-      children: [el("span", { text: localize("pushToTalkKey") }), button],
-    });
+        },
+      }),
+      mode === "ptt" &&
+        !!bindings &&
+        settingRow({
+          label: localize("pushToTalkKey"),
+          inline: true,
+          control: keybindRecorder(bindings, (code) => {
+            setPushToTalkKey(code)
+              .then(() => this.render())
+              .catch((error: unknown) => {
+                log.error("Error setting the push to talk key:", error);
+              });
+          }),
+        }),
+    );
   }
 
   private renderSensitivity(): HTMLElement {
     const krispActive =
       this.client.getAudioProcessingConfig().model === "krisp";
     const enabled = game.settings?.get(MODULE_NAME, "audioNoiseGate") ?? false;
-    this.meterThreshold =
+    const threshold =
       game.settings?.get(MODULE_NAME, "audioNoiseGateThreshold") ?? -50;
 
-    const toggle = switchControl(
-      localize("inputSensitivityEnable"),
-      enabled,
-      krispActive,
-      (checked) => {
-        void game.settings
-          ?.set(MODULE_NAME, "audioNoiseGate", checked)
-          .then(() => this.render());
-      },
-    );
-
-    this.meterFill = el("div", { className: "livekit-meter-fill" });
-    const slider = el("input", {
-      className: "livekit-meter-threshold",
-      attrs: {
-        type: "range",
-        min: METER_MIN_DB.toString(),
-        max: METER_MAX_DB.toString(),
-        step: "1",
-        value: this.meterThreshold.toString(),
-        "aria-label": localize("audioNoiseGateThreshold"),
-      },
-    });
-    slider.disabled = !enabled || krispActive;
     const caption = el("span", {
       className: "livekit-meter-caption",
-      text: `${this.meterThreshold.toString()} dB`,
+      text: `${threshold.toString()} dB`,
     });
-    slider.addEventListener("input", () => {
-      this.meterThreshold = Number(slider.value);
-      caption.textContent = `${slider.value} dB`;
-    });
-    slider.addEventListener("change", () => {
-      game.settings
-        ?.set(MODULE_NAME, "audioNoiseGateThreshold", Number(slider.value))
-        .catch((error: unknown) => {
-          log.error("Error saving the input sensitivity:", error);
-        });
-    });
-
-    const meter = el("div", {
-      className: `livekit-meter ${slider.disabled ? "disabled" : ""}`,
-      children: [
-        el("div", {
-          className: "livekit-meter-track",
-          children: [this.meterFill],
-        }),
-        slider,
-      ],
+    this.meter = new InputLevelMeter({
+      threshold,
+      disabled: !enabled || krispActive,
+      onInput: (value) => {
+        caption.textContent = `${value.toString()} dB`;
+      },
+      onChange: (value) => {
+        game.settings
+          ?.set(MODULE_NAME, "audioNoiseGateThreshold", value)
+          .catch((error: unknown) => {
+            log.error("Error saving the input sensitivity:", error);
+          });
+      },
     });
 
     return this.section(
       localize("inputSensitivity"),
-      toggle,
-      meter,
+      switchInput({
+        label: localize("inputSensitivityEnable"),
+        checked: enabled && !krispActive,
+        disabled: krispActive,
+        onChange: (checked) => {
+          void game.settings
+            ?.set(MODULE_NAME, "audioNoiseGate", checked)
+            .then(() => this.render());
+        },
+      }),
+      this.meter.element,
       el("p", {
-        className: "livekit-settings-hint",
+        className: "livekit-setting-hint",
         text: krispActive
           ? localize("krispRefinementDisabled")
           : localize("inputSensitivityHint"),
@@ -308,158 +218,75 @@ export default class AudioSettingsPopover {
   }
 
   private renderNoiseSuppression(): HTMLElement {
-    const select = el("select", {
-      className: "livekit-select",
-      attrs: { "aria-label": localize("noiseSuppressionModel") },
-      children: this.client.getNoiseModelOptions().map((option) => {
-        const element = el("option", {
-          text: option.detail
-            ? `${option.label} (${option.detail})`
-            : option.label,
-          attrs: { value: option.model },
-        });
-        element.selected = option.selected;
-        element.disabled = !option.selectable && !option.selected;
-        return element;
-      }),
-    });
-    select.addEventListener("change", () => {
-      this.client
-        .selectNoiseModel(
-          select.value as Parameters<LiveKitClient["selectNoiseModel"]>[0],
-        )
-        .then(() => this.render())
-        .catch((error: unknown) => {
-          log.error("Error selecting the noise suppression model:", error);
-        });
-    });
-
+    const options = this.client.getNoiseModelOptions();
     const krispActive =
       this.client.getAudioProcessingConfig().model === "krisp";
     const settingToggle = (
       key: "audioEchoCancellation" | "audioAutoGainControl",
       disabled: boolean,
     ) =>
-      switchControl(
-        localize(key),
-        game.settings?.get(MODULE_NAME, key) ?? false,
+      switchInput({
+        label: localize(key),
+        checked: (game.settings?.get(MODULE_NAME, key) ?? false) && !disabled,
         disabled,
-        (checked) => {
+        onChange: (checked) => {
           void game.settings
             ?.set(MODULE_NAME, key, checked)
             .then(() => this.render());
         },
-      );
+      });
 
     return this.section(
       localize("noiseSuppressionModel"),
-      select,
+      selectInput({
+        label: localize("noiseSuppressionModel"),
+        options: noiseModelOptions(options),
+        value: options.find((option) => option.selected)?.model ?? "none",
+        onChange: (value) => {
+          this.client
+            .selectNoiseModel(value as (typeof options)[number]["model"])
+            .then(() => this.render())
+            .catch((error: unknown) => {
+              log.error("Error selecting the noise suppression model:", error);
+            });
+        },
+      }),
       settingToggle("audioEchoCancellation", false),
       settingToggle("audioAutoGainControl", krispActive),
     );
   }
-
-  private startMeter(): void {
-    this.stopMeter();
-    const microphone = this.client.audioTrack?.mediaStreamTrack;
-    if (!microphone || microphone.readyState === "ended") {
-      return;
-    }
-    // Measure a clone so the level shows even while muted
-    const track = microphone.clone();
-    track.enabled = true;
-    const context = this.client.getAudioProcessorContext();
-    const source = context.createMediaStreamSource(new MediaStream([track]));
-    const analyser = context.createAnalyser();
-    analyser.fftSize = 1024;
-    source.connect(analyser);
-    const samples = new Float32Array(analyser.fftSize);
-
-    const update = () => {
-      analyser.getFloatTimeDomainData(samples);
-      let sum = 0;
-      for (const sample of samples) {
-        sum += sample * sample;
-      }
-      const rms = Math.sqrt(sum / samples.length);
-      const db = clamp(
-        20 * Math.log10(rms || 1e-8),
-        METER_MIN_DB,
-        METER_MAX_DB,
-      );
-      if (this.meterFill) {
-        const percent =
-          ((db - METER_MIN_DB) / (METER_MAX_DB - METER_MIN_DB)) * 100;
-        this.meterFill.style.width = `${percent.toString()}%`;
-        this.meterFill.classList.toggle("open", db >= this.meterThreshold);
-      }
-      if (this.meter) {
-        this.meter.frame = requestAnimationFrame(update);
-      }
-    };
-    this.meter = {
-      track,
-      source,
-      analyser,
-      frame: requestAnimationFrame(update),
-    };
-  }
-
-  private stopMeter(): void {
-    this.stopRecordingKey?.();
-    if (!this.meter) {
-      return;
-    }
-    cancelAnimationFrame(this.meter.frame);
-    this.meter.source.disconnect();
-    this.meter.track.stop();
-    this.meter = undefined;
-  }
 }
 
 /**
- * A labelled on/off switch.
+ * Select options for a device list, keeping the current device even if it is
+ * not available right now.
  */
-function switchControl(
-  label: string,
-  checked: boolean,
-  disabled: boolean,
-  onChange: (checked: boolean) => void,
-): HTMLElement {
-  const input = el("input", { attrs: { type: "checkbox", role: "switch" } });
-  input.checked = checked && !disabled;
-  input.disabled = disabled;
-  input.addEventListener("change", () => {
-    onChange(input.checked);
-  });
-  return el("label", {
-    className: `livekit-switch ${disabled ? "disabled" : ""}`,
-    children: [
-      el("span", { text: label }),
-      input,
-      el("span", { className: "livekit-switch-track" }),
-    ],
-  });
+export function deviceOptions(
+  devices: Record<string, string>,
+  current: string,
+): { value: string; label: string }[] {
+  const options = Object.entries(devices).map(([value, label]) => ({
+    value,
+    label,
+  }));
+  if (current && !(current in devices)) {
+    options.push({
+      value: current,
+      label: current === "disabled" ? localize("deviceDisabled") : current,
+    });
+  }
+  return options;
 }
 
 /**
- * A readable name for a KeyboardEvent.code, using Foundry's helper when
- * available.
+ * Select options for the noise cancellation models.
  */
-function keyDisplayName(code: string): string {
-  const keyboardManager = (
-    foundry as unknown as {
-      helpers?: {
-        interaction?: {
-          KeyboardManager?: {
-            getKeycodeDisplayString?: (code: string) => string;
-          };
-        };
-      };
-    }
-  ).helpers?.interaction?.KeyboardManager;
-  return (
-    keyboardManager?.getKeycodeDisplayString?.(code) ??
-    code.replace(/^(Key|Digit)/, "")
-  );
+export function noiseModelOptions(
+  options: ReturnType<LiveKitClient["getNoiseModelOptions"]>,
+): { value: string; label: string; disabled: boolean }[] {
+  return options.map((option) => ({
+    value: option.model,
+    label: option.detail ? `${option.label} (${option.detail})` : option.label,
+    disabled: !option.selectable,
+  }));
 }

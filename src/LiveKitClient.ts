@@ -66,6 +66,19 @@ const log = new Logger();
 const NO_AUDIO_PROCESSOR = "none";
 
 /**
+ * Whether the user has ever saved a client setting of this module (rather
+ * than using its default). Client settings are kept in local storage.
+ */
+function isClientSettingStored(key: string): boolean {
+  try {
+    const storage = game.settings?.storage.get("client") as Storage | undefined;
+    return storage?.getItem(`${MODULE_NAME}.${key}`) != null;
+  } catch {
+    return true;
+  }
+}
+
+/**
  * The client-side audio processing to run on the local microphone. Krisp is
  * never combined with the noise gate.
  */
@@ -324,7 +337,14 @@ export default class LiveKitClient {
    * enhanced noise cancellation is turned off. This may differ from the model
    * actually running (see getAudioProcessingConfig).
    */
-  private getSelectedNoiseModel(): NoiseCancellationModel | "none" {
+  getSelectedNoiseModel(): NoiseCancellationModel | "none" {
+    // Players who never picked a model use the GM's default
+    if (
+      !isClientSettingStored("enhancedNoiseCancellation") &&
+      !isClientSettingStored("noiseSuppressionModel")
+    ) {
+      return this.getDefaultNoiseModel();
+    }
     if (
       !(game.settings?.get(MODULE_NAME, "enhancedNoiseCancellation") ?? false)
     ) {
@@ -336,11 +356,21 @@ export default class LiveKitClient {
   }
 
   /**
+   * The noise cancellation model the GM chose for players who haven't picked
+   * one.
+   */
+  getDefaultNoiseModel(): NoiseCancellationModel | "none" {
+    const model = game.settings?.get(MODULE_NAME, "defaultNoiseModel");
+    return model === "none" ? "none" : toNoiseCancellationModel(model);
+  }
+
+  /**
    * Whether the Krisp noise filter can be used: the room must be connected to
    * a LiveKit Cloud server and the browser must support the filter.
    */
   isKrispAvailable(): boolean {
     return (
+      (game.settings?.get(MODULE_NAME, "allowKrisp") ?? true) &&
       this.krispSupported === true &&
       isLiveKitCloud(this.liveKitRoom, this.liveKitServerAddress)
     );
@@ -518,7 +548,12 @@ export default class LiveKitClient {
     }
     return models.map((model) => {
       let detail: string | undefined;
-      if (model === "krisp" && !isCloud) {
+      if (
+        model === "krisp" &&
+        !(game.settings?.get(MODULE_NAME, "allowKrisp") ?? true)
+      ) {
+        detail = game.i18n?.localize(`${LANG_NAME}.krispDisabledByGM`);
+      } else if (model === "krisp" && !isCloud) {
         detail = game.i18n?.localize(`${LANG_NAME}.krispRequiresCloud`);
       } else if (model === "krisp" && this.krispSupported === false) {
         detail = game.i18n?.localize(`${LANG_NAME}.krispUnsupported`);
@@ -682,12 +717,7 @@ export default class LiveKitClient {
    * settings' onChange handlers coalesce into a single debounced refresh.
    */
   private async resetNoiseSettings(): Promise<void> {
-    await game.settings?.set(MODULE_NAME, "enhancedNoiseCancellation", true);
-    await game.settings?.set(
-      MODULE_NAME,
-      "noiseSuppressionModel",
-      DEFAULT_NOISE_SUPPRESSION_MODEL,
-    );
+    await this.selectNoiseModel(this.getDefaultNoiseModel());
     await game.settings?.set(MODULE_NAME, "audioAutoGainControl", true);
     await game.settings?.set(MODULE_NAME, "audioEchoCancellation", true);
     await game.settings?.set(MODULE_NAME, "audioNoiseSuppression", true);
@@ -709,6 +739,7 @@ export default class LiveKitClient {
    */
   applyDiscordStyle(): void {
     const enabled =
+      (game.settings?.get(MODULE_NAME, "allowDiscordStyleUI") ?? true) &&
       (game.settings?.get(MODULE_NAME, "discordStyleUI") ?? true) &&
       !this.useExternalAV;
     document.body.classList.toggle("livekit-discord-ui", enabled);

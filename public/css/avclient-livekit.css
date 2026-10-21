@@ -462,19 +462,125 @@
   text-transform: uppercase;
 }
 
-.livekit-field {
+/* Setting rows: a label and hint, with the control below or (inline) on the
+   right. Shared by the voice settings popover and the A/V settings window. */
+.livekit-setting {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  margin-bottom: 8px;
-  color: var(--livekit-text-muted);
-  font-size: 12px;
+  gap: 6px;
+  margin-bottom: 12px;
 }
 
-.livekit-field-inline {
+.livekit-setting.inline {
   flex-direction: row;
   align-items: center;
   justify-content: space-between;
+  gap: 16px;
+}
+
+.livekit-setting-text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.livekit-setting-label {
+  color: var(--livekit-text);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.livekit-setting-hint {
+  margin: 0;
+  color: var(--livekit-text-muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.livekit-setting-hint a {
+  color: #00a8fc;
+}
+
+.livekit-text,
+.livekit-number {
+  box-sizing: border-box;
+  width: 100%;
+  height: 36px;
+  padding: 0 10px;
+  border: none;
+  border-radius: 4px;
+  background: var(--livekit-bg-input);
+  box-shadow: none;
+  color: var(--livekit-text);
+  font-size: 13px;
+}
+
+.livekit-number {
+  width: 96px;
+}
+
+.livekit-text:focus,
+.livekit-number:focus,
+.livekit-select:focus {
+  outline: 2px solid #00a8fc;
+  box-shadow: none;
+}
+
+.livekit-radio-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.livekit-button {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: auto;
+  min-height: 32px;
+  margin: 0;
+  padding: 0 16px;
+  border: none;
+  border-radius: 4px;
+  background: #4e5058;
+  box-shadow: none;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.livekit-button:hover {
+  background: #6d6f78;
+  box-shadow: none;
+}
+
+.livekit-button-primary {
+  background: #248046;
+}
+
+.livekit-button-primary:hover {
+  background: #1a6334;
+}
+
+.livekit-button-danger {
+  background: #da373c;
+}
+
+.livekit-button-danger:hover {
+  background: #a12828;
+}
+
+.livekit-button-patreon {
+  background: #ff424d;
+}
+
+.livekit-button-patreon:hover {
+  background: #e0353f;
 }
 
 .livekit-select {
@@ -513,8 +619,10 @@
 
 .livekit-switch {
   justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 12px;
   background: none;
-  padding: 4px 0;
+  padding: 0;
 }
 
 .livekit-switch input {
@@ -655,12 +763,6 @@
 
 .livekit-meter.disabled .livekit-meter-threshold {
   cursor: default;
-}
-
-.livekit-settings-hint {
-  margin: 4px 0 0;
-  color: var(--livekit-text-muted);
-  font-size: 12px;
 }
 
 .livekit-meter-caption {
@@ -865,4 +967,181 @@
   color: var(--livekit-red);
   font-size: 11px;
   --livekit-bg-panel: rgba(0, 0, 0, 0.7);
+}
+
+/* -------------------------------------------- */
+/*  A/V settings window                         */
+/* -------------------------------------------- */
+
+.livekit-settings-app .window-content {
+  padding: 0;
+  overflow: hidden;
+  background: #313338;
+  color: var(--livekit-text);
+}
+
+.livekit-settings-window {
+  display: flex;
+  height: 100%;
+  min-height: 0;
+  font-size: 13px;
+}
+
+.livekit-settings-window [hidden] {
+  display: none !important;
+}
+
+.livekit-settings-nav {
+  flex: none;
+  width: 200px;
+  padding: 20px 8px;
+  overflow-y: auto;
+  background: #2b2d31;
+}
+
+.livekit-settings-nav-header {
+  margin: 12px 10px 6px;
+  padding: 0;
+  border: none;
+  color: var(--livekit-text-muted);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.livekit-settings-nav-header:first-child {
+  margin-top: 0;
+}
+
+.livekit-settings-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  margin: 0 0 2px;
+  padding: 6px 10px;
+  border: none;
+  border-radius: 4px;
+  background: none;
+  box-shadow: none;
+  color: var(--livekit-text-muted);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.4;
+  text-align: left;
+  cursor: pointer;
+}
+
+.livekit-settings-nav-item:hover {
+  background: var(--livekit-bg-hover);
+  box-shadow: none;
+  color: var(--livekit-text);
+}
+
+.livekit-settings-nav-item.active {
+  background: #404249;
+  color: #fff;
+}
+
+.livekit-settings-main {
+  position: relative;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.livekit-settings-content {
+  flex: 1;
+  padding: 24px 32px 88px;
+  overflow-y: auto;
+}
+
+.livekit-settings-pane {
+  max-width: 560px;
+}
+
+.livekit-settings-pane h2 {
+  margin: 0 0 20px;
+  padding: 0;
+  border: none;
+  color: var(--livekit-text-header);
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.livekit-settings-group {
+  margin-bottom: 24px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.livekit-settings-group:last-child {
+  border-bottom: none;
+}
+
+.livekit-settings-group h4 {
+  margin: 0 0 12px;
+  padding: 0;
+  border: none;
+  color: var(--livekit-text-muted);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.livekit-settings-subgroup {
+  margin: 4px 0 12px;
+  padding: 12px 12px 0;
+  border-radius: var(--livekit-radius);
+  background: #2b2d31;
+}
+
+/* Signing in to Patreon needs the server type to be saved first */
+.livekit-tavern-unsaved,
+.livekit-tavern.unsaved > :not(.livekit-tavern-unsaved) {
+  display: none;
+}
+
+.livekit-tavern.unsaved .livekit-tavern-unsaved {
+  display: block;
+  padding-bottom: 12px;
+}
+
+/* Discord's "unsaved changes" bar */
+.livekit-unsaved-bar {
+  position: absolute;
+  right: 20px;
+  bottom: 16px;
+  left: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 10px 10px 16px;
+  border-radius: var(--livekit-radius);
+  background: var(--livekit-bg-floating);
+  box-shadow: var(--livekit-shadow);
+  color: var(--livekit-text);
+  font-weight: 500;
+  animation: livekit-slide-up 0.15s ease-out;
+}
+
+.livekit-unsaved-actions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.livekit-unsaved-actions .livekit-link-button {
+  color: var(--livekit-text);
+}
+
+@keyframes livekit-slide-up {
+  from {
+    transform: translateY(12px);
+    opacity: 0;
+  }
 }

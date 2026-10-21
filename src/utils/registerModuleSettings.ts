@@ -4,12 +4,17 @@ import debug from "debug";
 
 const log = new Logger();
 
+/**
+ * Register the module's settings. None of them are shown in Foundry's module
+ * settings list: they are all edited in the A/V settings window
+ * (LiveKitAVConfig), which the list links to.
+ */
 export default function registerModuleSettings(): void {
   game.settings?.register(MODULE_NAME, "displayConnectionQuality", {
     name: "LIVEKITAVCLIENT.displayConnectionQuality",
     hint: "LIVEKITAVCLIENT.displayConnectionQualityHint",
     scope: "client",
-    config: true,
+    config: false,
     default: true,
     type: new foundry.data.fields.BooleanField({ initial: true }),
     onChange: () => game.webrtc?.render(),
@@ -21,11 +26,60 @@ export default function registerModuleSettings(): void {
     name: "LIVEKITAVCLIENT.discordStyleUI",
     hint: "LIVEKITAVCLIENT.discordStyleUIHint",
     scope: "client",
-    config: true,
+    config: false,
     default: true,
     type: new foundry.data.fields.BooleanField({ initial: true }),
     onChange: () => {
       game.webrtc?.client._liveKitClient.applyDiscordStyle();
+    },
+  });
+
+  // GM options for all players
+  game.settings?.register(MODULE_NAME, "allowDiscordStyleUI", {
+    name: "LIVEKITAVCLIENT.allowDiscordStyleUI",
+    hint: "LIVEKITAVCLIENT.allowDiscordStyleUIHint",
+    scope: "world",
+    config: false,
+    default: true,
+    type: new foundry.data.fields.BooleanField({ initial: true }),
+    onChange: () => {
+      game.webrtc?.client._liveKitClient.applyDiscordStyle();
+    },
+  });
+
+  game.settings?.register(MODULE_NAME, "allowKrisp", {
+    name: "LIVEKITAVCLIENT.allowKrisp",
+    hint: "LIVEKITAVCLIENT.allowKrispHint",
+    scope: "world",
+    config: false,
+    default: true,
+    type: new foundry.data.fields.BooleanField({ initial: true }),
+    onChange: () => {
+      game.webrtc?.client._liveKitClient.scheduleAudioProcessingRefresh();
+    },
+  });
+
+  // The noise cancellation model for players who haven't picked one
+  game.settings?.register(MODULE_NAME, "defaultNoiseModel", {
+    name: "LIVEKITAVCLIENT.defaultNoiseModel",
+    hint: "LIVEKITAVCLIENT.defaultNoiseModelHint",
+    scope: "world",
+    config: false,
+    default: "gtcrn",
+    type: new foundry.data.fields.StringField({
+      required: true,
+      blank: false,
+      initial: "gtcrn",
+      choices: {
+        none: "LIVEKITAVCLIENT.noiseSuppressionModelNone",
+        speex: "LIVEKITAVCLIENT.noiseSuppressionModelSpeex",
+        rnnoise: "LIVEKITAVCLIENT.noiseSuppressionModelRnnoise",
+        gtcrn: "LIVEKITAVCLIENT.noiseSuppressionModelGtcrn",
+        krisp: "LIVEKITAVCLIENT.noiseSuppressionModelKrisp",
+      },
+    }),
+    onChange: () => {
+      game.webrtc?.client._liveKitClient.scheduleAudioProcessingRefresh();
     },
   });
 
@@ -93,7 +147,7 @@ export default function registerModuleSettings(): void {
     name: "LIVEKITAVCLIENT.audioMusicMode",
     hint: "LIVEKITAVCLIENT.audioMusicModeHint",
     scope: "client",
-    config: true,
+    config: false,
     default: false,
     type: new foundry.data.fields.BooleanField({ initial: false }),
     onChange: () => {
@@ -120,7 +174,7 @@ export default function registerModuleSettings(): void {
     name: "LIVEKITAVCLIENT.noiseSuppressionModel",
     hint: "LIVEKITAVCLIENT.noiseSuppressionModelHint",
     scope: "client",
-    config: true,
+    config: false,
     default: "gtcrn",
     type: new foundry.data.fields.StringField({
       required: true,
@@ -143,7 +197,7 @@ export default function registerModuleSettings(): void {
     name: "LIVEKITAVCLIENT.audioQualityPreset",
     hint: "LIVEKITAVCLIENT.audioQualityPresetHint",
     scope: "client",
-    config: true,
+    config: false,
     default: "speech",
     type: new foundry.data.fields.StringField({
       required: true,
@@ -169,7 +223,7 @@ export default function registerModuleSettings(): void {
     name: "LIVEKITAVCLIENT.audioAutoGainControl",
     hint: "LIVEKITAVCLIENT.audioAutoGainControlHint",
     scope: "client",
-    config: true,
+    config: false,
     default: true,
     type: new foundry.data.fields.BooleanField({ initial: true }),
     onChange: () => {
@@ -181,7 +235,7 @@ export default function registerModuleSettings(): void {
     name: "LIVEKITAVCLIENT.audioEchoCancellation",
     hint: "LIVEKITAVCLIENT.audioEchoCancellationHint",
     scope: "client",
-    config: true,
+    config: false,
     default: true,
     type: new foundry.data.fields.BooleanField({ initial: true }),
     onChange: () => {
@@ -193,7 +247,7 @@ export default function registerModuleSettings(): void {
     name: "LIVEKITAVCLIENT.audioNoiseSuppression",
     hint: "LIVEKITAVCLIENT.audioNoiseSuppressionHint",
     scope: "client",
-    config: true,
+    config: false,
     default: true,
     type: new foundry.data.fields.BooleanField({ initial: true }),
     onChange: () => {
@@ -206,7 +260,7 @@ export default function registerModuleSettings(): void {
     name: "LIVEKITAVCLIENT.audioNoiseGate",
     hint: "LIVEKITAVCLIENT.audioNoiseGateHint",
     scope: "client",
-    config: true,
+    config: false,
     default: false,
     type: new foundry.data.fields.BooleanField({ initial: false }),
     onChange: () => {
@@ -218,7 +272,7 @@ export default function registerModuleSettings(): void {
     name: "LIVEKITAVCLIENT.audioNoiseGateThreshold",
     hint: "LIVEKITAVCLIENT.audioNoiseGateThresholdHint",
     scope: "client",
-    config: true,
+    config: false,
     default: -50,
     type: new foundry.data.fields.NumberField({
       required: true,
@@ -237,7 +291,7 @@ export default function registerModuleSettings(): void {
     name: "LIVEKITAVCLIENT.useExternalAV",
     hint: "LIVEKITAVCLIENT.useExternalAVHint",
     scope: "client",
-    config: true,
+    config: false,
     default: false,
     type: new foundry.data.fields.BooleanField({ initial: false }),
     requiresReload: true,
@@ -247,7 +301,7 @@ export default function registerModuleSettings(): void {
     name: "LIVEKITAVCLIENT.resetRoom",
     hint: "LIVEKITAVCLIENT.resetRoomHint",
     scope: "world",
-    config: true,
+    config: false,
     default: false,
     type: new foundry.data.fields.BooleanField({ initial: false }),
     onChange: (value: boolean | null) => {
@@ -284,7 +338,7 @@ export default function registerModuleSettings(): void {
     name: "LIVEKITAVCLIENT.debug",
     hint: "LIVEKITAVCLIENT.debugHint",
     scope: "world",
-    config: true,
+    config: false,
     default: false,
     type: new foundry.data.fields.BooleanField({ initial: false }),
     requiresReload: true,
@@ -295,7 +349,7 @@ export default function registerModuleSettings(): void {
     name: "LIVEKITAVCLIENT.liveKitTrace",
     hint: "LIVEKITAVCLIENT.liveKitTraceHint",
     scope: "world",
-    config: game.settings.get(MODULE_NAME, "debug") ?? false,
+    config: false,
     default: false,
     type: new foundry.data.fields.BooleanField({ initial: false }),
     requiresReload: true,
@@ -306,7 +360,7 @@ export default function registerModuleSettings(): void {
     name: "LIVEKITAVCLIENT.devMode",
     hint: "LIVEKITAVCLIENT.devModeHint",
     scope: "world",
-    config: import.meta.env.MODE === "development",
+    config: false,
     default: false,
     type: new foundry.data.fields.BooleanField({ initial: false }),
     requiresReload: true,
@@ -322,7 +376,7 @@ export default function registerModuleSettings(): void {
     name: "LIVEKITAVCLIENT.authServer",
     hint: "LIVEKITAVCLIENT.authServerHint",
     scope: "world",
-    config: game.settings.get(MODULE_NAME, "devMode") ?? false,
+    config: false,
     default: TAVERN_AUTH_SERVER,
     type: new foundry.data.fields.StringField({
       required: true,
@@ -337,7 +391,7 @@ export default function registerModuleSettings(): void {
     name: "LIVEKITAVCLIENT.forceTurn",
     hint: "LIVEKITAVCLIENT.forceTurnHint",
     scope: "world",
-    config: game.settings.get(MODULE_NAME, "devMode") ?? false,
+    config: false,
     default: false,
     type: new foundry.data.fields.BooleanField({ initial: false }),
     requiresReload: true,
