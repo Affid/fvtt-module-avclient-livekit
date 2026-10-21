@@ -1,11 +1,11 @@
-import { RemoteParticipant, Track } from "livekit-client";
 import type LiveKitClient from "../LiveKitClient";
 import Avatar, { badge } from "./Avatar";
 import { localize } from "./controls";
 import { el } from "./dom";
 
 /**
- * Adds Discord-style decorations to Foundry's camera views: a speaking ring,
+ * Adds Discord-style decorations to Foundry's camera views (used when the
+ * Discord-style camera dock isn't): a speaking ring,
  * the user's avatar while their camera is off, mute/deafen badges, and a
  * right-click menu for other users' volume.
  *
@@ -13,7 +13,6 @@ import { el } from "./dom";
  * the decorations are re-applied after every render from the state kept here.
  */
 export default class CameraViewDecorator {
-  private readonly speaking = new Set<string>();
   private readonly decoratedViews = new WeakSet<HTMLElement>();
 
   constructor(private readonly client: LiveKitClient) {}
@@ -52,20 +51,11 @@ export default class CameraViewDecorator {
   }
 
   setSpeaking(userId: string, speaking: boolean): void {
-    if (speaking) {
-      this.speaking.add(userId);
-    } else {
-      this.speaking.delete(userId);
-    }
     const view = this.getView(userId);
     view?.classList.toggle("livekit-speaking", speaking);
     view
       ?.querySelector(".livekit-camera-avatar .livekit-avatar")
       ?.classList.toggle("is-speaking", speaking);
-  }
-
-  isSpeaking(userId: string): boolean {
-    return this.speaking.has(userId);
   }
 
   private getView(userId: string): HTMLElement | null {
@@ -101,6 +91,12 @@ export default class CameraViewDecorator {
     if (!this.decoratedViews.has(view)) {
       this.decoratedViews.add(view);
       view.classList.add("livekit-camera-view");
+      // Foundry's volume slider; the module plays the audio itself
+      view
+        .querySelector(".webrtc-volume-slider")
+        ?.addEventListener("change", (event) => {
+          this.client.onVolumeChange(event);
+        });
       if (userId !== game.user?.id) {
         view.addEventListener("contextmenu", (event) => {
           if (!document.body.classList.contains("livekit-discord-ui")) {
@@ -108,12 +104,7 @@ export default class CameraViewDecorator {
           }
           event.preventDefault();
           event.stopPropagation();
-          this.client.userVolumeMenu.open(
-            userId,
-            event.clientX,
-            event.clientY,
-            view,
-          );
+          this.client.userMenu.open(userId, event.clientX, event.clientY, view);
         });
       }
     }
@@ -122,22 +113,25 @@ export default class CameraViewDecorator {
   }
 
   private updateView(view: HTMLElement, userId: string): void {
-    const muted = this.isUserMuted(userId);
+    const speaking = this.client.isUserSpeaking(userId);
+    const muted = this.client.isUserMuted(userId);
     const deafened = this.client.voiceControls.isUserDeafened(userId);
-    view.classList.toggle("livekit-speaking", this.speaking.has(userId));
+    view.classList.toggle("livekit-speaking", speaking);
     // Foundry hides the video when it doesn't expect any, even if a track is
     // playing
     const video = view.querySelector<HTMLVideoElement>("video.user-camera");
     view.classList.toggle(
       "livekit-no-video",
-      !this.hasVideo(userId) || !video || video.hasAttribute("hidden"),
+      !this.client.isUserVideoOn(userId) ||
+        !video ||
+        video.hasAttribute("hidden"),
     );
     view.classList.toggle("livekit-muted", muted);
     view.classList.toggle("livekit-deafened", deafened);
 
     view
       .querySelector(".livekit-camera-avatar .livekit-avatar")
-      ?.classList.toggle("is-speaking", this.speaking.has(userId));
+      ?.classList.toggle("is-speaking", speaking);
     const badges = view.querySelector(".livekit-camera-badges");
     if (badges) {
       badges.replaceChildren();
@@ -157,34 +151,5 @@ export default class CameraViewDecorator {
         );
       }
     }
-  }
-
-  /**
-   * Whether a user's camera is showing video.
-   */
-  private hasVideo(userId: string): boolean {
-    const track =
-      userId === game.user?.id
-        ? this.client.videoTrack
-        : this.client.getUserVideoTrack(userId);
-    return !!track && !track.isMuted;
-  }
-
-  /**
-   * Whether a user's microphone is muted or off. Users we have no LiveKit
-   * participant for are not shown as muted, since we don't know.
-   */
-  private isUserMuted(userId: string): boolean {
-    if (userId === game.user?.id) {
-      return this.client.voiceControls.isMuted() || !this.client.audioTrack;
-    }
-    const participant = this.client.liveKitParticipants.get(userId);
-    if (!(participant instanceof RemoteParticipant)) {
-      return false;
-    }
-    const publication = participant.getTrackPublication(
-      Track.Source.Microphone,
-    );
-    return !publication || publication.isMuted;
   }
 }

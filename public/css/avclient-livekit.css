@@ -1437,3 +1437,636 @@
     opacity: 0;
   }
 }
+
+/* -------------------------------------------- */
+/*  Camera dock                                 */
+/* -------------------------------------------- */
+
+/* Foundry's #camera-views, drawn by the Discord-style dock */
+#camera-views.livekit-dock {
+  --lk-tile-bg: var(--lk-color-bg-secondary-alt);
+  --lk-ring-gap: var(--lk-tile-bg);
+  position: relative;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  border: none;
+  background: var(--lk-color-bg-tertiary);
+  color: var(--lk-color-text);
+}
+
+#camera-views.livekit-dock[data-placement="left"] {
+  border-right: 1px solid var(--lk-color-border);
+}
+
+#camera-views.livekit-dock[data-placement="right"] {
+  border-left: 1px solid var(--lk-color-border);
+}
+
+#camera-views.livekit-dock.horizontal {
+  height: calc(var(--av-width) * 3 / 4);
+}
+
+#camera-views.livekit-dock[data-placement="top"] {
+  border-bottom: 1px solid var(--lk-color-border);
+}
+
+#camera-views.livekit-dock[data-placement="bottom"] {
+  border-top: 1px solid var(--lk-color-border);
+}
+
+#camera-views.livekit-dock.is-floating {
+  position: fixed;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  border-radius: var(--lk-radius-md);
+  box-shadow: var(--lk-shadow-high);
+}
+
+.livekit-dock-header {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--lk-space-4);
+  min-height: 36px;
+  padding: 0 var(--lk-space-2) 0 var(--lk-space-5);
+  border-bottom: 1px solid var(--lk-color-border);
+  color: var(--lk-color-text-muted);
+  font-weight: var(--lk-font-weight-semibold);
+  user-select: none;
+}
+
+.livekit-dock.is-floating .livekit-dock-header {
+  cursor: grab;
+}
+
+.livekit-dock.is-floating.dragging .livekit-dock-header {
+  cursor: grabbing;
+}
+
+.livekit-dock-title {
+  display: flex;
+  align-items: center;
+  gap: var(--lk-space-3);
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.livekit-dock-tools {
+  display: flex;
+  flex: none;
+}
+
+.livekit-dock-tools .livekit-icon-button {
+  --lk-icon-button-size: 28px;
+  font-size: 14px;
+}
+
+.livekit-dock-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--lk-space-4);
+  min-height: 0;
+  padding: var(--lk-space-4);
+  overflow: auto;
+}
+
+.livekit-dock.horizontal .livekit-dock-body {
+  flex-direction: row;
+}
+
+.livekit-dock-stage:empty {
+  display: none;
+}
+
+.livekit-dock-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 200px), 1fr));
+  align-content: start;
+  gap: var(--lk-space-4);
+}
+
+.livekit-dock.horizontal .livekit-dock-list {
+  display: flex;
+  height: 100%;
+}
+
+.livekit-dock.horizontal .livekit-dock-list .livekit-tile {
+  height: 100%;
+}
+
+/* Focus: one user large, the others in a strip */
+.livekit-dock[data-layout="focus"] .livekit-dock-stage {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+}
+
+.livekit-dock-stage .livekit-tile {
+  flex: 1;
+  min-height: 0;
+}
+
+.livekit-dock.is-floating[data-layout="focus"]
+  .livekit-dock-stage
+  .livekit-tile,
+.livekit-dock.horizontal[data-layout="focus"]
+  .livekit-dock-stage
+  .livekit-tile {
+  aspect-ratio: auto;
+}
+
+.livekit-dock[data-layout="focus"] .livekit-dock-list {
+  display: flex;
+  flex: none;
+  overflow: auto;
+}
+
+.livekit-dock.vertical:not(.is-floating)[data-layout="focus"]
+  .livekit-dock-list {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+}
+
+.livekit-dock.is-floating[data-layout="focus"]
+  .livekit-dock-list
+  .livekit-tile {
+  flex: none;
+  height: 72px;
+}
+
+.livekit-dock.horizontal[data-layout="focus"] .livekit-dock-list {
+  height: 100%;
+}
+
+/* Tiles */
+.livekit-tile {
+  position: relative;
+  flex: none;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border-radius: var(--lk-radius-md);
+  background: var(--lk-tile-bg);
+  cursor: pointer;
+  user-select: none;
+}
+
+.livekit-tile:focus-visible {
+  outline: 2px solid var(--lk-color-focus);
+  outline-offset: 2px;
+}
+
+.livekit-tile-media {
+  position: absolute;
+  inset: 0;
+}
+
+.livekit-tile video.user-camera {
+  display: none;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.livekit-tile.is-video video.user-camera {
+  display: block;
+}
+
+.livekit-tile video.local-camera {
+  transform: scaleX(-1);
+}
+
+.livekit-tile-avatar {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.livekit-tile.is-video .livekit-tile-avatar {
+  display: none;
+}
+
+.livekit-tile-avatar .livekit-avatar {
+  --lk-avatar-size: min(40%, 80px);
+  height: auto;
+  aspect-ratio: 1;
+}
+
+/* The speaking ring, and the user's color with Foundry's border colors */
+.livekit-tile-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  transition: box-shadow var(--lk-duration-fast) var(--lk-ease);
+}
+
+.livekit-tile.has-color .livekit-tile-ring {
+  box-shadow: inset 0 0 0 2px var(--lk-tile-color);
+}
+
+.livekit-tile.is-speaking .livekit-tile-ring {
+  box-shadow:
+    inset 0 0 0 2px var(--lk-color-green),
+    inset 0 0 0 3px var(--lk-tile-bg);
+}
+
+.livekit-tile-footer {
+  position: absolute;
+  right: var(--lk-space-3);
+  bottom: var(--lk-space-3);
+  left: var(--lk-space-3);
+  display: flex;
+  align-items: center;
+  gap: var(--lk-space-2);
+  min-width: 0;
+  pointer-events: none;
+}
+
+.livekit-tile-names {
+  display: flex;
+  align-items: baseline;
+  gap: var(--lk-space-2);
+  min-width: 0;
+  max-width: 100%;
+  padding: var(--lk-space-1) var(--lk-space-3);
+  border-radius: var(--lk-radius-sm);
+  background: var(--lk-color-bg-overlay);
+  color: var(--lk-color-text-header);
+  font-size: var(--lk-font-size-md);
+  font-weight: var(--lk-font-weight-semibold);
+  white-space: nowrap;
+}
+
+.livekit-tile-name,
+.livekit-tile-secondary {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.livekit-tile-secondary {
+  color: var(--lk-color-text-muted);
+  font-size: var(--lk-font-size-sm);
+  font-weight: normal;
+}
+
+.livekit-tile-secondary:empty {
+  display: none;
+}
+
+.livekit-tile.no-nameplate .livekit-tile-names {
+  display: none;
+}
+
+.livekit-tile-badges {
+  display: flex;
+  flex: none;
+  gap: var(--lk-space-1);
+}
+
+.livekit-tile-badges .livekit-badge {
+  width: 20px;
+  height: 20px;
+  font-size: 10px;
+}
+
+/* Connection quality bars, on hover */
+.livekit-quality {
+  display: none;
+  flex: none;
+  align-items: flex-end;
+  gap: 2px;
+  height: 12px;
+  margin-left: auto;
+  padding: var(--lk-space-1) var(--lk-space-2);
+  border-radius: var(--lk-radius-sm);
+  background: var(--lk-color-bg-overlay);
+  box-sizing: content-box;
+  pointer-events: auto;
+}
+
+.livekit-tile:is(:hover, :focus-within) .livekit-quality {
+  display: flex;
+}
+
+.livekit-dock.hide-quality .livekit-quality {
+  display: none;
+}
+
+.livekit-quality > span {
+  width: 3px;
+  border-radius: 1px;
+  background: var(--lk-color-neutral);
+}
+
+.livekit-quality > span:nth-child(1) {
+  height: 4px;
+}
+
+.livekit-quality > span:nth-child(2) {
+  height: 8px;
+}
+
+.livekit-quality > span:nth-child(3) {
+  height: 12px;
+}
+
+.livekit-quality[data-quality="excellent"] > span,
+.livekit-quality[data-quality="good"] > span:nth-child(-n + 2) {
+  background: var(--lk-color-green);
+}
+
+.livekit-quality[data-quality="poor"] > span:nth-child(1) {
+  background: var(--lk-color-yellow);
+}
+
+.livekit-quality[data-quality="lost"] > span:nth-child(1) {
+  background: var(--lk-color-red);
+}
+
+/* Hover controls */
+.livekit-tile-controls {
+  position: absolute;
+  top: var(--lk-space-3);
+  right: var(--lk-space-3);
+  display: none;
+  gap: var(--lk-space-2);
+}
+
+.livekit-tile:is(:hover, :focus-within) .livekit-tile-controls {
+  display: flex;
+}
+
+.livekit-tile-controls .livekit-icon-button {
+  --lk-icon-button-size: 28px;
+  --lk-slash-gap: var(--lk-color-bg-overlay);
+  border-radius: 50%;
+  background: var(--lk-color-bg-overlay);
+  color: var(--lk-color-text-header);
+  font-size: 13px;
+}
+
+.livekit-tile-controls .livekit-icon-button:hover {
+  background: var(--lk-color-bg-floating);
+}
+
+/* Compact: a list of avatars, like a Discord voice channel */
+.livekit-dock[data-layout="compact"] .livekit-dock-list,
+.livekit-dock[data-layout="compact"].horizontal .livekit-dock-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lk-space-1);
+  height: auto;
+}
+
+.livekit-dock[data-layout="compact"] .livekit-tile,
+.livekit-dock[data-layout="compact"].horizontal
+  .livekit-dock-list
+  .livekit-tile {
+  display: flex;
+  align-items: center;
+  gap: var(--lk-space-4);
+  height: auto;
+  min-height: 36px;
+  padding: var(--lk-space-2) var(--lk-space-4);
+  aspect-ratio: auto;
+  border-radius: var(--lk-radius-sm);
+  background: none;
+}
+
+.livekit-dock[data-layout="compact"] .livekit-tile:hover {
+  background: var(--lk-color-bg-hover);
+}
+
+.livekit-dock[data-layout="compact"] .livekit-tile-media,
+.livekit-dock[data-layout="compact"] .livekit-tile-avatar,
+.livekit-dock[data-layout="compact"] .livekit-tile-footer {
+  position: static;
+  display: flex;
+}
+
+.livekit-dock[data-layout="compact"] video.user-camera,
+.livekit-dock[data-layout="compact"] .livekit-tile-ring {
+  display: none;
+}
+
+.livekit-dock[data-layout="compact"] .livekit-tile-avatar .livekit-avatar {
+  --lk-avatar-size: 24px;
+  height: var(--lk-avatar-size);
+}
+
+.livekit-dock[data-layout="compact"] .livekit-tile-footer {
+  flex: 1;
+}
+
+.livekit-dock[data-layout="compact"] .livekit-tile-names {
+  padding: 0;
+  background: none;
+  color: var(--lk-color-text-muted);
+}
+
+.livekit-dock[data-layout="compact"]
+  .livekit-tile.is-speaking
+  .livekit-tile-names {
+  color: var(--lk-color-text-header);
+}
+
+.livekit-dock[data-layout="compact"] .livekit-tile-badges .livekit-badge {
+  background: none;
+}
+
+.livekit-dock[data-layout="compact"] .livekit-tile-controls {
+  position: static;
+}
+
+/* Collapsed: a slim bar of avatars */
+.livekit-dock.is-collapsed.vertical:not(.is-floating) {
+  width: 56px;
+}
+
+.livekit-dock.is-collapsed.horizontal {
+  height: 56px;
+}
+
+.livekit-dock.is-collapsed.is-floating {
+  height: auto !important;
+}
+
+.livekit-dock.is-collapsed .livekit-dock-title {
+  display: none;
+}
+
+.livekit-dock.is-collapsed .livekit-dock-header {
+  justify-content: center;
+  padding: 0;
+}
+
+.livekit-dock.is-collapsed
+  .livekit-dock-tools
+  .livekit-icon-button:first-child {
+  display: none;
+}
+
+.livekit-dock.is-collapsed .livekit-dock-body {
+  align-items: center;
+  padding: var(--lk-space-4) var(--lk-space-2);
+}
+
+.livekit-dock.is-collapsed .livekit-dock-stage {
+  display: contents;
+}
+
+.livekit-dock.is-collapsed .livekit-dock-list {
+  display: flex;
+  flex-direction: inherit;
+  align-items: center;
+  gap: var(--lk-space-4);
+}
+
+.livekit-dock.is-collapsed .livekit-tile {
+  width: 40px;
+  height: 40px;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: none;
+  overflow: visible;
+}
+
+.livekit-dock.is-collapsed :is(.livekit-tile-footer, .livekit-tile-controls),
+.livekit-dock.is-collapsed .livekit-tile-ring,
+.livekit-dock.is-collapsed video.user-camera {
+  display: none;
+}
+
+.livekit-dock.is-collapsed .livekit-tile-avatar {
+  display: flex;
+}
+
+.livekit-dock.is-collapsed .livekit-tile-avatar .livekit-avatar {
+  --lk-ring-gap: var(--lk-color-bg-tertiary);
+  --lk-avatar-size: 40px;
+  height: 40px;
+}
+
+/* Resizing: the inner edge of a docked dock, the corner of a floating one */
+.livekit-dock > .livekit-resize-handle {
+  position: absolute;
+  z-index: 2;
+}
+
+.livekit-dock[data-placement="left"] > .livekit-resize-handle,
+.livekit-dock[data-placement="right"] > .livekit-resize-handle {
+  top: 0;
+  bottom: 0;
+  width: 6px;
+  cursor: ew-resize;
+}
+
+.livekit-dock[data-placement="left"] > .livekit-resize-handle {
+  right: -3px;
+}
+
+.livekit-dock[data-placement="right"] > .livekit-resize-handle {
+  left: -3px;
+}
+
+.livekit-dock[data-placement="top"] > .livekit-resize-handle,
+.livekit-dock[data-placement="bottom"] > .livekit-resize-handle {
+  right: 0;
+  left: 0;
+  height: 6px;
+  cursor: ns-resize;
+}
+
+.livekit-dock[data-placement="top"] > .livekit-resize-handle {
+  bottom: -3px;
+}
+
+.livekit-dock[data-placement="bottom"] > .livekit-resize-handle {
+  top: -3px;
+}
+
+.livekit-dock.is-collapsed > .livekit-resize-handle {
+  display: none;
+}
+
+.livekit-resize-handle {
+  width: 14px;
+  height: 14px;
+}
+
+.livekit-dock[data-placement="float"] > .livekit-resize-handle,
+.livekit-tile-window > .livekit-resize-handle {
+  right: 0;
+  bottom: 0;
+  cursor: nwse-resize;
+  background: linear-gradient(
+    135deg,
+    transparent 50%,
+    var(--lk-color-neutral) 50%,
+    var(--lk-color-neutral) 60%,
+    transparent 60%,
+    transparent 75%,
+    var(--lk-color-neutral) 75%,
+    var(--lk-color-neutral) 85%,
+    transparent 85%
+  );
+}
+
+/* A tile popped out of the dock */
+.livekit-tile-window {
+  --lk-tile-bg: var(--lk-color-bg-secondary-alt);
+  --lk-ring-gap: var(--lk-tile-bg);
+  position: fixed;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: var(--lk-radius-md);
+  background: var(--lk-color-bg-floating);
+  box-shadow: var(--lk-shadow-high);
+}
+
+.livekit-tile-window > .livekit-resize-handle {
+  position: absolute;
+  z-index: 2;
+}
+
+.livekit-tile-window-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--lk-space-4);
+  padding: 0 var(--lk-space-1) 0 var(--lk-space-4);
+  color: var(--lk-color-text-muted);
+  font-weight: var(--lk-font-weight-semibold);
+  cursor: grab;
+  user-select: none;
+}
+
+.livekit-tile-window.dragging .livekit-tile-window-header {
+  cursor: grabbing;
+}
+
+.livekit-tile-window-header .livekit-icon-button {
+  --lk-icon-button-size: 28px;
+  font-size: 13px;
+}
+
+.livekit-tile-window-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.livekit-tile-window .livekit-tile {
+  border-radius: 0;
+}

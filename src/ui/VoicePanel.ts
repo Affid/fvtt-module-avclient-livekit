@@ -221,7 +221,7 @@ export default class VoicePanel {
     // Local user
     const userId = game.user?.id ?? "";
     this.avatar.setSource(game.user?.avatar);
-    this.avatar.setSpeaking(this.client.cameraViewDecorator.isSpeaking(userId));
+    this.avatar.setSpeaking(this.client.isUserSpeaking(userId));
     this.userName.textContent = game.user?.name ?? "";
 
     const runningModel = this.client.getAudioProcessingConfig().model;
@@ -320,6 +320,16 @@ export default class VoicePanel {
     }
     this.element.style.left = `${clamp(left, MARGIN, window.innerWidth - width - MARGIN).toString()}px`;
     this.element.style.top = `${clamp(top, MARGIN, window.innerHeight - height - MARGIN).toString()}px`;
+  }
+
+  /**
+   * Place the panel again, e.g. after the camera dock moved, which moves the
+   * player list.
+   */
+  reposition(): void {
+    if (this.element.isConnected) {
+      this.position();
+    }
   }
 
   private readonly onResize = () => {

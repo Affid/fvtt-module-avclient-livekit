@@ -1,5 +1,6 @@
 import type { SocketMessage } from "../../types/avclient-livekit";
 import LiveKitAVConfig from "../LiveKitAVConfig";
+import LiveKitCameraViews from "../ui/dock/LiveKitCameraViews";
 import { MODULE_NAME } from "./constants";
 import registerModuleSettings from "./registerModuleSettings";
 
@@ -18,6 +19,16 @@ Hooks.on("init", () => {
 
   // Register module settings
   registerModuleSettings();
+
+  // Use the Discord-style camera dock in place of Foundry's. Foundry creates
+  // the dock once, so switching needs a reload.
+  if (
+    (game.settings?.get(MODULE_NAME, "allowDiscordStyleUI") ?? true) &&
+    (game.settings?.get(MODULE_NAME, "discordStyleUI") ?? true) &&
+    !(game.settings?.get(MODULE_NAME, "useExternalAV") ?? false)
+  ) {
+    (CONFIG.ui as { webrtc: unknown }).webrtc = LiveKitCameraViews;
+  }
 
   // The module's settings are all in the A/V settings window; link to it from
   // Foundry's module settings list

@@ -394,6 +394,7 @@ export default class LiveKitAVConfig
       | "audioNoiseSuppression"
       | "audioMusicMode"
       | "audioAutoSensitivity"
+      | "dockFollowSpeaker"
       | "discordStyleUI"
       | "displayConnectionQuality"
       | "useExternalAV"
@@ -713,6 +714,34 @@ export default class LiveKitAVConfig
         this.clientSwitch("hideDock"),
         this.clientSwitch("hidePlayerList"),
       ),
+      // The Discord-style dock's own options
+      !!this.liveKitClient?.dock &&
+        this.group(
+          localize("appearanceDiscordDock"),
+          settingRow({
+            label: localize("dockLayoutTitle"),
+            control: selectInput({
+              name: `${MODULE_NAME}.dockLayout`,
+              label: localize("dockLayoutTitle"),
+              options: ["grid", "focus", "compact"].map((layout) => ({
+                value: layout,
+                label: localize(`dockLayout.${layout}`),
+              })),
+              value: game.settings?.get(MODULE_NAME, "dockLayout") ?? "grid",
+            }),
+          }),
+          this.moduleSwitch("dockFollowSpeaker", {
+            label: localize("dockFollowSpeaker"),
+            hint: localize("dockFollowSpeakerHint"),
+          }),
+          switchInput({
+            name: `${MODULE_NAME}.dockFloating.floating`,
+            label: localize("dockFloatingSetting"),
+            hint: localize("dockFloatingSettingHint"),
+            checked:
+              game.settings?.get(MODULE_NAME, "dockFloating").floating === true,
+          }),
+        ),
     ];
   }
 
@@ -1158,7 +1187,10 @@ export default class LiveKitAVConfig
         document: true,
       })._source.value;
 
-      if (setting.key === "liveKitConnectionSettings") {
+      if (
+        setting.key === "liveKitConnectionSettings" ||
+        setting.key === "dockFloating"
+      ) {
         // We need to handle this one as an object and merge the settings
         const priorValueObject = game.settings?.get(
           // @ts-expect-error - document: true handling is not in foundry-vtt-types

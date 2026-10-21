@@ -93,18 +93,19 @@ export default class UserAudioMixer {
       return;
     }
 
+    // Users hidden from the camera dock (Foundry's "hide user") aren't heard
+    // either, as when their audio played from their camera view
     const muted =
-      this.client.voiceControls.isDeafened() || this.isLocallyMuted(userId);
+      this.client.voiceControls.isDeafened() ||
+      this.isLocallyMuted(userId) ||
+      this.client.settings.getUser(userId)?.blocked === true;
     const volume = this.getVolume(userId);
     const microphoneTrack = this.getMicrophoneTrack(userId);
     const boostTrack =
       !muted && volume > 1 && this.canBoost() ? microphoneTrack : undefined;
     const boost = !!boostTrack;
 
-    const audioElements =
-      document
-        .querySelector(`.camera-view[data-user="${userId}"]`)
-        ?.querySelectorAll("audio") ?? [];
+    const audioElements = this.client.getUserAudioElements(userId);
     for (const audioElement of audioElements) {
       const isMicrophone = audioElement.classList.contains(
         `user-${Track.Source.Microphone}-audio`,

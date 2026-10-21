@@ -20,8 +20,9 @@ export default function registerModuleSettings(): void {
     onChange: () => game.webrtc?.render(),
   });
 
-  // Discord-style interface: voice panel, speaking rings, avatars, per-user
-  // volume menu, and voice settings popover
+  // Discord-style interface: voice panel, camera dock, per-user menus, and
+  // voice settings popover. The camera dock is chosen when Foundry starts, so
+  // switching needs a reload.
   game.settings?.register(MODULE_NAME, "discordStyleUI", {
     name: "LIVEKITAVCLIENT.discordStyleUI",
     hint: "LIVEKITAVCLIENT.discordStyleUIHint",
@@ -29,6 +30,7 @@ export default function registerModuleSettings(): void {
     config: false,
     default: true,
     type: new foundry.data.fields.BooleanField({ initial: true }),
+    requiresReload: true,
     onChange: () => {
       game.webrtc?.client._liveKitClient.applyDiscordStyle();
     },
@@ -42,6 +44,7 @@ export default function registerModuleSettings(): void {
     config: false,
     default: true,
     type: new foundry.data.fields.BooleanField({ initial: true }),
+    requiresReload: true,
     onChange: () => {
       game.webrtc?.client._liveKitClient.applyDiscordStyle();
     },
@@ -88,6 +91,50 @@ export default function registerModuleSettings(): void {
     scope: "client",
     config: false,
     default: null,
+  });
+
+  // The Discord-style camera dock: its layout, whether it floats (and where),
+  // and whether the focus layout follows whoever speaks. Docked placement,
+  // width and collapsing use Foundry's own A/V settings.
+  game.settings?.register(MODULE_NAME, "dockLayout", {
+    scope: "client",
+    config: false,
+    default: "grid",
+    type: new foundry.data.fields.StringField({
+      required: true,
+      blank: false,
+      initial: "grid",
+      choices: { grid: "grid", focus: "focus", compact: "compact" },
+    }),
+    onChange: () => {
+      void game.webrtc?.client._liveKitClient.dock?.render();
+    },
+  });
+
+  game.settings?.register(MODULE_NAME, "dockFloating", {
+    scope: "client",
+    config: false,
+    default: { floating: false },
+    onChange: () => {
+      void game.webrtc?.client._liveKitClient.dock?.render();
+    },
+  });
+
+  game.settings?.register(MODULE_NAME, "dockFollowSpeaker", {
+    scope: "client",
+    config: false,
+    default: false,
+    type: new foundry.data.fields.BooleanField({ initial: false }),
+    onChange: () => {
+      void game.webrtc?.client._liveKitClient.dock?.render();
+    },
+  });
+
+  // Users whose video is hidden just for this client, keyed by user ID
+  game.settings?.register(MODULE_NAME, "userVideoHidden", {
+    scope: "client",
+    config: false,
+    default: {},
   });
 
   // Per-user playback volumes (0 to 2) and local mutes, keyed by user ID

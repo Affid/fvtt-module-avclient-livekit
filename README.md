@@ -97,13 +97,30 @@ choose the noise cancellation model, and open the voice settings (devices,
 voice activity or push to talk, input sensitivity with a live level meter).
 Drag the panel by its status row to move it.
 
-Camera views get a green ring around whoever is speaking, show the user's
-avatar while their camera is off, and show when a user is muted or deafened.
-Right-click another user's camera view to change their volume (up to 200%) or
-mute them just for yourself.
+It also replaces Foundry's camera dock with its own:
 
-Turn this off under A/V Settings → Appearance. The GM can turn it off for
-everyone under A/V Settings → Player Options.
+- Each user's tile shows their video, or their avatar while their camera is
+  off, a green ring while they speak, and badges when they are muted,
+  deafened, muted by you, or have their camera off. Hover a tile for its
+  connection quality.
+- Three layouts: a grid, one user in focus with the others in a strip (click a
+  tile to focus it, or let the focus follow whoever speaks), and a compact list
+  of avatars like a Discord voice channel.
+- Dock it on any side of the screen or let it float (drag it by its header,
+  resize it by its corner), and collapse it to a slim bar of avatars. Change
+  this from the button in the dock's header.
+- Hover your own tile to mute yourself or turn your camera on or off.
+  Right-click another user's tile to change their volume (up to 200%), mute
+  them or hide their video just for yourself, focus them, pop their tile out
+  into a window of its own, or watch them picture-in-picture. The GM can also
+  block a user's audio or video, and use the breakout rooms from there.
+
+Foundry's own A/V settings still apply: dock position and width, collapsing
+the dock, nameplates, player color borders, and hidden users.
+
+Turn this off under A/V Settings → Appearance (Foundry reloads to switch
+camera docks). The GM can turn it off for everyone under A/V Settings → Player
+Options.
 
 ## Settings
 

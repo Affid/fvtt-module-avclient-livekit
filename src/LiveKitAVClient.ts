@@ -754,13 +754,11 @@ export default class LiveKitAVClient extends foundry.av.AVClient {
       );
 
       // Add the audio for the user
-      if (audioElement) {
-        await this._liveKitClient.attachAudioTrack(
-          userId,
-          userAudioTrack,
-          audioElement,
-        );
-      }
+      await this._liveKitClient.attachAudioTrack(
+        userId,
+        userAudioTrack,
+        audioElement,
+      );
     }
 
     // Add connection quality indicator
@@ -823,7 +821,11 @@ export default class LiveKitAVClient extends foundry.av.AVClient {
       "client.audioSink",
       `client.users.${game.user?.id ?? ""}.muted`,
     ].some((k) => keys.has(k));
-    if (voiceStateChange) {
+    // Hiding a user from the dock also silences them
+    const blockedChange = [...keys].some((key) =>
+      /^client\.users\.[^.]+\.blocked$/.test(key),
+    );
+    if (voiceStateChange || blockedChange) {
       this._liveKitClient.onVoiceStateChanged();
     }
 
@@ -833,6 +835,10 @@ export default class LiveKitAVClient extends foundry.av.AVClient {
       "client.muteAll",
       "client.disableVideo",
       "client.nameplates",
+      "client.dockPosition",
+      "client.dockWidth",
+      "client.hideDock",
+      "client.borderColors",
     ].some((k) => keys.has(k));
     if (audioSourceChange || videoSourceChange || renderChange)
       this.master.render();

@@ -64,12 +64,16 @@ import UserAudioMixer from "./UserAudioMixer";
 import AudioSettingsPopover from "./ui/AudioSettingsPopover";
 import CameraViewDecorator from "./ui/CameraViewDecorator";
 import NoiseModelMenu from "./ui/NoiseModelMenu";
-import UserVolumeMenu from "./ui/UserVolumeMenu";
+import UserMenu from "./ui/UserMenu";
+import LiveKitCameraViews from "./ui/dock/LiveKitCameraViews";
 import VoicePanel from "./ui/VoicePanel";
 
 const log = new Logger();
 
 const NO_AUDIO_PROCESSOR = "none";
+
+/** The ID of the hidden element holding remote users' audio elements */
+const AUDIO_CONTAINER_ID = "livekit-audio";
 
 /**
  * Whether the user has ever saved a client setting of this module (rather
@@ -133,6 +137,8 @@ export default class LiveKitClient {
     verified?: boolean;
   } | null = null;
   failedAudioProcessors = new Set<string>();
+  /** The users who are speaking, as LiveKit (or our voice gate) tells */
+  private readonly speakingUsers = new Set<string>();
   /** The voice activity gate failed to start; audio is sent without it */
   voiceGateFailed = false;
   private voiceGatePreview?: VoiceGateSettings;
@@ -149,7 +155,7 @@ export default class LiveKitClient {
   readonly voiceControls = new VoiceControls(this);
   readonly userAudioMixer = new UserAudioMixer(this);
   readonly cameraViewDecorator = new CameraViewDecorator(this);
-  readonly userVolumeMenu = new UserVolumeMenu(this);
+  readonly userMenu = new UserMenu(this);
   readonly audioSettingsPopover = new AudioSettingsPopover(this);
   readonly noiseModelMenu = new NoiseModelMenu(this);
   private voicePanelInstance?: VoicePanel;
@@ -513,6 +519,10 @@ export default class LiveKitClient {
    * The Discord-style voice panel. It is created on first use, once Foundry's
    * localization is available.
    */
+  get voicePanelIfCreated(): VoicePanel | undefined {
+    return this.voicePanelInstance;
+  }
+
   get voicePanel(): VoicePanel {
     this.voicePanelInstance ??= new VoicePanel(this);
     return this.voicePanelInstance;
@@ -528,7 +538,7 @@ export default class LiveKitClient {
       !this.useExternalAV;
     document.body.classList.toggle("livekit-discord-ui", enabled);
     if (!enabled) {
-      this.userVolumeMenu.close();
+      this.userMenu.close();
       this.audioSettingsPopover.close();
     }
     this.voicePanel.sync();
@@ -547,7 +557,48 @@ export default class LiveKitClient {
       this.userAudioMixer.applyAll();
       this.cameraViewDecorator.refreshAll();
     }
+    this.dock?.refresh();
     this.voicePanelInstance?.update();
+  }
+
+  /**
+   * The Discord-style camera dock, when it is Foundry's camera dock.
+   */
+  get dock(): LiveKitCameraViews | undefined {
+    return ui.webrtc instanceof LiveKitCameraViews ? ui.webrtc : undefined;
+  }
+
+  isUserSpeaking(userId: string): boolean {
+    return this.speakingUsers.has(userId);
+  }
+
+  /**
+   * Whether a user's microphone is muted or off. Users we have no LiveKit
+   * participant for are not shown as muted, since we don't know.
+   */
+  isUserMuted(userId: string): boolean {
+    if (userId === game.user?.id) {
+      return this.voiceControls.isMuted() || !this.audioTrack;
+    }
+    const participant = this.liveKitParticipants.get(userId);
+    if (!(participant instanceof RemoteParticipant)) {
+      return false;
+    }
+    const publication = participant.getTrackPublication(
+      Track.Source.Microphone,
+    );
+    return !publication || publication.isMuted;
+  }
+
+  /**
+   * Whether a user's camera is sending video.
+   */
+  isUserVideoOn(userId: string): boolean {
+    const track =
+      userId === game.user?.id
+        ? this.videoTrack
+        : this.getUserVideoTrack(userId);
+    return !!track && !track.isMuted;
   }
 
   addConnectionQualityIndicator(userId: string): void {
@@ -744,10 +795,10 @@ export default class LiveKitClient {
             this.videoTrack,
             this.trackPublishOptions,
           );
-          const userVideoElement = document.querySelector(
-            `.camera-view[data-user="${game.user?.id ?? ""}"] video.user-camera`,
+          const userVideoElement = this.getUserVideoElement(
+            game.user?.id ?? "",
           );
-          if (userVideoElement instanceof HTMLVideoElement) {
+          if (userVideoElement) {
             this.attachVideoTrack(this.videoTrack, userVideoElement);
           }
           game.user?.broadcastActivity({ av: { hidden: false } });
@@ -909,39 +960,57 @@ export default class LiveKitClient {
    * @param {HTMLVideoElement} videoElement   The HTMLVideoElement of the user
    * @return {HTMLAudioElement|null}
    */
+  /**
+   * The audio element playing one of a user's audio tracks. Audio elements
+   * live in a hidden container of their own rather than in the camera views,
+   * so re-rendering, hiding, or moving a camera view never interrupts audio.
+   * @param _videoElement   Not used; kept for compatibility
+   */
   getUserAudioElement(
     userId: string,
-    videoElement: HTMLVideoElement | null = null,
+    _videoElement: HTMLVideoElement | null,
     audioType: Track.Source,
-  ): HTMLAudioElement | null {
-    // Find an existing audio element
-    let audioElement = ui.webrtc?.element.querySelector(
-      `.camera-view[data-user="${userId}"] audio.user-${audioType}-audio`,
+  ): HTMLAudioElement {
+    let container = document.getElementById(AUDIO_CONTAINER_ID);
+    if (!container) {
+      container = document.createElement("div");
+      container.id = AUDIO_CONTAINER_ID;
+      container.hidden = true;
+      document.body.append(container);
+    }
+    let audioElement = container.querySelector<HTMLAudioElement>(
+      `audio[data-user="${userId}"][data-source="${audioType}"]`,
     );
-
-    // If one doesn't exist, create it
-    if (!audioElement && videoElement) {
+    if (!audioElement) {
       audioElement = document.createElement("audio");
       audioElement.className = `user-${audioType}-audio`;
-      if (audioElement instanceof HTMLAudioElement) {
-        audioElement.autoplay = true;
-      }
-      videoElement.after(audioElement);
-
-      // Bind volume control for microphone audio
-      const volumeSlider =
-        videoElement.parentElement?.parentElement?.querySelector(
-          ".webrtc-volume-slider",
-        );
-      volumeSlider?.addEventListener("change", this.onVolumeChange.bind(this));
+      audioElement.dataset.user = userId;
+      audioElement.dataset.source = audioType;
+      audioElement.autoplay = true;
+      container.append(audioElement);
     }
+    return audioElement;
+  }
 
-    if (audioElement instanceof HTMLAudioElement) {
-      return audioElement;
-    }
+  /**
+   * All of a user's audio elements (see getUserAudioElement).
+   */
+  getUserAudioElements(userId: string): HTMLAudioElement[] {
+    return [
+      ...document.querySelectorAll<HTMLAudioElement>(
+        `#${AUDIO_CONTAINER_ID} audio[data-user="${userId}"]`,
+      ),
+    ];
+  }
 
-    // The audio element was not found or created
-    return null;
+  /**
+   * The video element of a user's camera view, if it is rendered.
+   */
+  getUserVideoElement(userId: string): HTMLVideoElement | null {
+    const camera = ui.webrtc as unknown as
+      | { getUserVideoElement?: (userId: string) => HTMLVideoElement | null }
+      | undefined;
+    return camera?.getUserVideoElement?.(userId) ?? null;
   }
 
   async initializeLocalTracks(): Promise<void> {
@@ -1472,14 +1541,25 @@ export default class LiveKitClient {
   }
 
   onIsSpeakingChanged(userId: string | undefined, speaking: boolean): void {
-    if (userId) {
+    if (!userId) {
+      return;
+    }
+    if (speaking) {
+      this.speakingUsers.add(userId);
+    } else {
+      this.speakingUsers.delete(userId);
+    }
+    const dock = this.dock;
+    if (dock) {
+      dock.setSpeaking(userId, speaking);
+    } else {
       // @ts-expect-error - ui.webrtc.setUserIsSpeaking is not in foundry-vtt-types yet
       // eslint-disable-next-line @typescript-eslint/no-unsafe-call
       ui.webrtc?.setUserIsSpeaking(userId, speaking);
       this.cameraViewDecorator.setSpeaking(userId, speaking);
-      if (userId === game.user?.id) {
-        this.voicePanelInstance?.setSpeaking(speaking);
-      }
+    }
+    if (userId === game.user?.id) {
+      this.voicePanelInstance?.setSpeaking(speaking);
     }
   }
 
@@ -1546,6 +1626,10 @@ export default class LiveKitClient {
     }
 
     this.liveKitParticipants.delete(fvttUserId);
+    for (const audioElement of this.getUserAudioElements(fvttUserId)) {
+      audioElement.remove();
+    }
+    this.onIsSpeakingChanged(fvttUserId, false);
 
     // Clear breakout room cache if user is leaving a breakout room
     if (
@@ -1682,6 +1766,11 @@ export default class LiveKitClient {
     _cameraviews: foundry.applications.apps.av.CameraViews,
     html: HTMLElement,
   ): void {
+    // The Discord-style dock draws its own controls and decorations
+    if (this.dock) {
+      this.applyDiscordStyle();
+      return;
+    }
     this.decorateCameraViews(html);
 
     const userId = game.user?.id;
@@ -1730,37 +1819,25 @@ export default class LiveKitClient {
       return;
     }
 
-    const videoElement = document.querySelector(
-      `.camera-view[data-user="${fvttUserId}"]`,
-    );
-
-    if (!(videoElement instanceof HTMLVideoElement)) {
-      log.debug(
-        "videoElement not yet ready for",
-        fvttUserId,
-        "; skipping publication",
-        publication,
-      );
-      debounceRefreshView(fvttUserId);
-      return;
-    }
-
     if (track instanceof RemoteAudioTrack) {
-      // Get the audio element for the user
+      // Audio plays from elements of its own, which don't depend on the
+      // camera views
       const audioElement = this.getUserAudioElement(
         fvttUserId,
-        videoElement,
+        null,
         publication.source,
       );
-      if (audioElement) {
-        this.attachAudioTrack(fvttUserId, track, audioElement).catch(
-          (error: unknown) => {
-            log.error("Error attaching audio track:", error);
-          },
-        );
-      }
+      this.attachAudioTrack(fvttUserId, track, audioElement).catch(
+        (error: unknown) => {
+          log.error("Error attaching audio track:", error);
+        },
+      );
     } else if (track instanceof RemoteVideoTrack) {
-      this.attachVideoTrack(track, videoElement);
+      // The camera view may not be rendered yet; rendering attaches it then
+      const videoElement = this.getUserVideoElement(fvttUserId);
+      if (videoElement) {
+        this.attachVideoTrack(track, videoElement);
+      }
     } else {
       log.warn("Unknown track type subscribed from publication", publication);
     }

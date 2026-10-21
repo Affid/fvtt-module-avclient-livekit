@@ -26,125 +26,119 @@ export async function setBreakoutRoom(
   );
 }
 
+/**
+ * A breakout room action on a user, for the players list and the camera dock
+ * menus.
+ */
+export interface BreakoutAction {
+  label: string;
+  /** A Font Awesome icon class, e.g. "fa-comment" */
+  icon: string;
+  run: () => void;
+}
+
+/**
+ * The breakout room actions available for a user.
+ */
+export function getBreakoutActions(
+  userId: string,
+  liveKitClient: LiveKitClient,
+): BreakoutAction[] {
+  const isGM = game.user?.isGM === true;
+  const isSelf = userId === game.user?.id;
+  const userBreakoutRoom = getBreakoutRoom(userId);
+  const localize = (key: string) =>
+    game.i18n?.localize(`${LANG_NAME}.${key}`) ?? key;
+  const actions: (BreakoutAction | false)[] = [
+    isGM &&
+      !isSelf &&
+      !userBreakoutRoom && {
+        label: localize("startAVBreakout"),
+        icon: "fa-comment",
+        run: () => {
+          const breakoutRoom = foundry.utils.randomID(32);
+          _startBreakout(userId, breakoutRoom);
+          breakout(breakoutRoom, liveKitClient);
+        },
+      },
+    isGM &&
+      !isSelf &&
+      !!userBreakoutRoom &&
+      liveKitClient.breakoutRoom !== userBreakoutRoom && {
+        label: localize("joinAVBreakout"),
+        icon: "fa-comment-dots",
+        run: () => {
+          breakout(userBreakoutRoom, liveKitClient);
+        },
+      },
+    isGM &&
+      !isSelf &&
+      !!liveKitClient.breakoutRoom &&
+      userBreakoutRoom !== liveKitClient.breakoutRoom && {
+        label: localize("pullToAVBreakout"),
+        icon: "fa-comments",
+        run: () => {
+          _startBreakout(userId, liveKitClient.breakoutRoom);
+        },
+      },
+    isSelf &&
+      !!liveKitClient.breakoutRoom && {
+        label: localize("leaveAVBreakout"),
+        icon: "fa-comment-slash",
+        run: () => {
+          breakout(undefined, liveKitClient);
+        },
+      },
+    isGM &&
+      !isSelf &&
+      !!userBreakoutRoom && {
+        label: localize("removeFromAVBreakout"),
+        icon: "fa-comment-slash",
+        run: () => {
+          _endUserBreakout(userId);
+        },
+      },
+    isGM &&
+      isSelf && {
+        label: localize("endAllAVBreakouts"),
+        icon: "fa-ban",
+        run: () => {
+          _endAllBreakouts(liveKitClient);
+        },
+      },
+  ];
+  return actions.filter((action) => action !== false);
+}
+
 export function addContextOptions(
   contextOptions: foundry.applications.ux.ContextMenu.Entry<HTMLElement>[],
   liveKitClient: LiveKitClient,
 ): void {
-  // Add breakout options to the player list context menus
-  contextOptions.push(
-    {
-      name:
-        game.i18n?.localize(`${LANG_NAME}.startAVBreakout`) ??
-        "Start AV Breakout",
-      icon: '<i class="fa fa-comment"></i>',
-      condition: (players) => {
-        const userId: string = players.dataset.userId ?? "";
-        return (
-          game.user?.isGM === true &&
-          !getBreakoutRoom(userId) &&
-          userId !== game.user.id
-        );
-      },
+  // Add breakout options to the player list context menus. The actions
+  // depend on the user, so each entry looks its action up by label.
+  const actionFor = (players: HTMLElement, label: string) =>
+    getBreakoutActions(players.dataset.userId ?? "", liveKitClient).find(
+      (action) => action.label === label,
+    );
+  const entries: [string, string][] = [
+    ["startAVBreakout", "fa-comment"],
+    ["joinAVBreakout", "fa-comment-dots"],
+    ["pullToAVBreakout", "fa-comments"],
+    ["leaveAVBreakout", "fa-comment-slash"],
+    ["removeFromAVBreakout", "fa-comment-slash"],
+    ["endAllAVBreakouts", "fa-ban"],
+  ];
+  for (const [key, icon] of entries) {
+    const label = game.i18n?.localize(`${LANG_NAME}.${key}`) ?? key;
+    contextOptions.push({
+      name: label,
+      icon: `<i class="fa-solid ${icon}"></i>`,
+      condition: (players) => !!actionFor(players, label),
       callback: (players) => {
-        const breakoutRoom = foundry.utils.randomID(32);
-        if (!players.dataset.userId) {
-          log.warn("No userId found in players dataset, cannot start breakout");
-          return;
-        }
-        _startBreakout(players.dataset.userId, breakoutRoom);
-        breakout(breakoutRoom, liveKitClient);
+        actionFor(players, label)?.run();
       },
-    },
-    {
-      name:
-        game.i18n?.localize(`${LANG_NAME}.joinAVBreakout`) ?? "joinAVBreakout",
-      icon: '<i class="fas fa-comment-dots"></i>',
-      condition: (players) => {
-        const userId: string = players.dataset.userId ?? "";
-        const breakoutRoom = getBreakoutRoom(userId);
-        return (
-          game.user?.isGM === true &&
-          !!breakoutRoom &&
-          liveKitClient.breakoutRoom !== breakoutRoom &&
-          userId !== game.user.id
-        );
-      },
-      callback: (players) => {
-        const userId: string = players.dataset.userId ?? "";
-        const breakoutRoom = getBreakoutRoom(userId);
-        if (breakoutRoom) {
-          breakout(breakoutRoom, liveKitClient);
-        }
-      },
-    },
-    {
-      name:
-        game.i18n?.localize(`${LANG_NAME}.pullToAVBreakout`) ??
-        "pullToAVBreakout",
-      icon: '<i class="fas fa-comments"></i>',
-      condition: (players) => {
-        const userId: string = players.dataset.userId ?? "";
-        return (
-          game.user?.isGM === true &&
-          !!liveKitClient.breakoutRoom &&
-          getBreakoutRoom(userId) !== liveKitClient.breakoutRoom &&
-          userId !== game.user.id
-        );
-      },
-      callback: (players) => {
-        if (!players.dataset.userId) {
-          log.warn("No userId found in players dataset, pull to breakout");
-          return;
-        }
-        _startBreakout(players.dataset.userId, liveKitClient.breakoutRoom);
-      },
-    },
-    {
-      name:
-        game.i18n?.localize(`${LANG_NAME}.leaveAVBreakout`) ??
-        "leaveAVBreakout",
-      icon: '<i class="fas fa-comment-slash"></i>',
-      condition: (players) => {
-        const userId: string = players.dataset.userId ?? "";
-        return userId === game.user?.id && !!liveKitClient.breakoutRoom;
-      },
-      callback: () => {
-        breakout(undefined, liveKitClient);
-      },
-    },
-    {
-      name:
-        game.i18n?.localize(`${LANG_NAME}.removeFromAVBreakout`) ??
-        "removeFromAVBreakout",
-      icon: '<i class="fas fa-comment-slash"></i>',
-      condition: (players) => {
-        const userId: string = players.dataset.userId ?? "";
-        return (
-          game.user?.isGM === true &&
-          !!getBreakoutRoom(userId) &&
-          userId !== game.user.id
-        );
-      },
-      callback: (players) => {
-        if (typeof players.dataset.userId === "string") {
-          _endUserBreakout(players.dataset.userId);
-        }
-      },
-    },
-    {
-      name:
-        game.i18n?.localize(`${LANG_NAME}.endAllAVBreakouts`) ??
-        "endAllAVBreakouts",
-      icon: '<i class="fas fa-ban"></i>',
-      condition: (players) => {
-        const userId: string = players.dataset.userId ?? "";
-        return game.user?.isGM === true && userId === game.user.id;
-      },
-      callback: () => {
-        _endAllBreakouts(liveKitClient);
-      },
-    },
-  );
+    });
+  }
 }
 
 export function breakout(
