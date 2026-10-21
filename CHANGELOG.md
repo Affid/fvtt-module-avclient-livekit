@@ -1,5 +1,22 @@
 # LiveKit A/V Client for FoundryVTT: Changelog
 
+## 0.6.8-krisp.5
+
+- Input sensitivity like Discord. In Voice Activity mode your microphone is only sent while you speak:
+  - "Automatically determine input sensitivity" (on by default) learns the level of your background noise within a moment and sends audio that is clearly louder. It keeps up with a noisier or quieter room, without rising while you talk.
+  - Turn it off to set the threshold yourself on the level meter.
+  - The level meter shows what is being judged and turns green while your voice is being sent. It also works while you are muted.
+  - It works after noise cancellation (including Krisp), so it judges your voice rather than the noise.
+  - The speaking ring around your avatar now shows exactly when you are being sent.
+  - Changes in the A/V Settings window are heard right away and undone if you close the window without saving.
+  - The Input Sensitivity settings only show in Voice Activity mode; with push to talk, the key decides.
+- The push to talk release delay is a slider from 0 to 2000 ms.
+- Auto gain control can now be used with Krisp.
+- Fix Krisp turning itself off, and sending your microphone unfiltered, after the microphone restarted (for example when changing the input device).
+- Fix the level meter staying empty while muted or using push to talk.
+- If input sensitivity can't start, noise cancellation keeps running without it.
+- The old "Silence sounds below the threshold" switch is gone; your threshold is kept for manual sensitivity.
+
 ## 0.6.8-krisp.4
 
 - The Discord-style interface now looks and behaves as one app: the voice panel, voice settings, noise suppression menu, user volume menu, camera views and the A/V Settings window share the same colors, buttons, switches, sliders, menus and tooltips.
