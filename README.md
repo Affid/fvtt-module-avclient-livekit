@@ -51,6 +51,7 @@ LiveKit AVClient provides a number of features beyond the A/V option built into 
 - The ability for individual users to disable receiving video in case they are on very limited connections.
 - The ability to individually hide or mute users only for yourself.
 - Audio Music Mode to tune audio publishing settings for audio streamed by your account.
+- [Camera background](#camera-background) blur or images.
 - Actively maintained and tested against the latest versions of FoundryVTT.
 - Additional features planned for future releases!
 
@@ -174,11 +175,30 @@ voice is being sent. The input sensitivity works after noise cancellation, so
 it judges your voice rather than the noise, and the speaking ring shows
 exactly when you are being heard. With push to talk, the key decides instead.
 
+## Camera background
+
+Blur what's behind you, or replace it with an image, under Background in the
+voice settings (the gear in the voice panel) or in A/V Settings → Video. The
+images to pick from are Foundry's own fantasy and sci-fi art, or your own:
+choose one with Foundry's file browser, or, if you may not browse files, enter
+its address. Others see your video with the effect.
+
+The effect runs on your computer with
+[LiveKit's track processors](https://github.com/livekit/track-processors-js)
+and Google's MediaPipe, from files that come with the module (about 10 MB,
+downloaded the first time you use it). It needs a recent browser with WebGL 2,
+and uses some of your computer's graphics power. If an image can't be loaded,
+your background is blurred instead.
+
 ## Third-party notices
 
 The enhanced noise cancellation feature bundles open-source models
 (RNNoise, Speex, and GTCRN) via
 [`@sapphi-red/web-noise-suppressor`](https://github.com/sapphi-red/web-noise-suppressor),
 and LiveKit's [`@livekit/krisp-noise-filter`](https://www.npmjs.com/package/@livekit/krisp-noise-filter).
-See [THIRD-PARTY-NOTICES](/THIRD-PARTY-NOTICES.md) for their licenses and
+The camera background bundles
+[`@livekit/track-processors`](https://github.com/livekit/track-processors-js),
+Google's [MediaPipe](https://github.com/google-ai-edge/mediapipe) runtime and
+its selfie segmentation model. See
+[THIRD-PARTY-NOTICES](/THIRD-PARTY-NOTICES.md) for their licenses and
 attributions.

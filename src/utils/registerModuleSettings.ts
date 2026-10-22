@@ -142,6 +142,51 @@ export default function registerModuleSettings(): void {
     },
   });
 
+  // What is done with the background of the camera video
+  game.settings?.register(MODULE_NAME, "videoBackground", {
+    scope: "client",
+    config: false,
+    default: "none",
+    type: new foundry.data.fields.StringField({
+      required: true,
+      blank: false,
+      initial: "none",
+      choices: { none: "none", blur: "blur", image: "image" },
+    }),
+    onChange: () => {
+      void game.webrtc?.client._liveKitClient.updateVideoBackground({
+        retry: true,
+      });
+    },
+  });
+
+  // The background image: one of Foundry's own, or the user's
+  game.settings?.register(MODULE_NAME, "videoBackgroundImage", {
+    scope: "client",
+    config: false,
+    default: "ui/backgrounds/setup.webp",
+    type: new foundry.data.fields.StringField({
+      required: true,
+      blank: false,
+      initial: "ui/backgrounds/setup.webp",
+    }),
+    onChange: () => {
+      if (game.settings.get(MODULE_NAME, "videoBackground") === "image") {
+        void game.webrtc?.client._liveKitClient.updateVideoBackground({
+          retry: true,
+        });
+      }
+    },
+  });
+
+  // The user's own background image, kept while one of Foundry's is in use
+  game.settings?.register(MODULE_NAME, "videoBackgroundCustomImage", {
+    scope: "client",
+    config: false,
+    default: "",
+    type: new foundry.data.fields.StringField({ initial: "" }),
+  });
+
   // Users whose video is hidden just for this client, keyed by user ID
   game.settings?.register(MODULE_NAME, "userVideoHidden", {
     scope: "client",

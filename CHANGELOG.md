@@ -1,5 +1,11 @@
 # LiveKit A/V Client for FoundryVTT: Changelog
 
+## 0.6.8-krisp.11
+
+- Camera background, like Discord: blur what's behind you, or replace it with an image, under Background in the voice settings or in A/V Settings → Video. The images are Foundry's own fantasy and sci-fi art, or your own, picked with Foundry's file browser or by its address. Others see your video with the effect; it keeps going when you switch cameras or turn yours off and on.
+  - It runs on your computer, with LiveKit's track processors and Google's MediaPipe, from files that come with the module, and needs a browser with WebGL 2. Browsers that can't run it show the option disabled.
+  - If an image can't be loaded, your background is blurred instead; if the effect can't start at all, your video is sent without it. Either way a message says so.
+
 ## 0.6.8-krisp.10
 
 - The grid sizes its tiles to the space the dock has and the number of people in it, like Discord: as large as fits, in as many columns as works best. Tiles only scroll once they would get smaller than 120 pixels.

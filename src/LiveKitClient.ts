@@ -49,6 +49,13 @@ import VoiceActivityGate, {
   type VoiceGateSettings,
 } from "./VoiceActivityGate";
 import { LANG_NAME, MODULE_NAME } from "./utils/constants";
+import {
+  applyVideoBackground,
+  supportsVideoBackground,
+  videoBackgroundImageUrl,
+  VideoBackgroundImageError,
+  type VideoBackground,
+} from "./VideoBackground";
 import LiveKitAVClient from "./LiveKitAVClient";
 import {
   LiveKitServerType,
@@ -171,6 +178,11 @@ export default class LiveKitClient {
   screenTracks: LocalTrack[] = [];
   useExternalAV = false;
   videoTrack: LocalVideoTrack | null = null;
+  /** The camera background effect failed to start; video is sent without it */
+  videoBackgroundFailed = false;
+  /** The background image that couldn't be loaded; blur is used instead */
+  failedVideoBackgroundImage: string | undefined;
+  private videoBackgroundQueue: Promise<void> = Promise.resolve();
   windowClickListener: EventListener | null = null;
 
   liveKitServerTypes: LiveKitServerTypes = {
@@ -1423,6 +1435,88 @@ export default class LiveKitClient {
     ) {
       await this.videoTrack.mute();
     }
+
+    // The background effect loads in the background rather than holding up
+    // the camera; LiveKit swaps in the processed video once it runs
+    if (this.videoTrack) {
+      void this.updateVideoBackground();
+    }
+  }
+
+  /**
+   * The camera background effect to use: the settings, unless this browser
+   * can't run it or it failed to start. An image that couldn't be loaded is
+   * replaced by blur, so the background stays hidden.
+   */
+  getVideoBackground(): VideoBackground {
+    const mode = game.settings?.get(MODULE_NAME, "videoBackground");
+    if (
+      (mode !== "blur" && mode !== "image") ||
+      this.videoBackgroundFailed ||
+      !supportsVideoBackground()
+    ) {
+      return { mode: "none" };
+    }
+    if (mode === "image") {
+      const url = videoBackgroundImageUrl(
+        game.settings?.get(MODULE_NAME, "videoBackgroundImage") ?? "",
+      );
+      if (url !== this.failedVideoBackgroundImage) {
+        return { mode, url };
+      }
+    }
+    return { mode: "blur" };
+  }
+
+  /**
+   * Put the camera background effect from the settings on the camera track.
+   * Calls run one after another, so quick changes apply in order.
+   *
+   * @param retry   Try again after the effect failed, e.g. because it was
+   *                picked again
+   */
+  updateVideoBackground({ retry = false } = {}): Promise<void> {
+    this.videoBackgroundQueue = this.videoBackgroundQueue.then(async () => {
+      if (retry) {
+        this.videoBackgroundFailed = false;
+        this.failedVideoBackgroundImage = undefined;
+      }
+      const track = this.videoTrack;
+      if (!track) {
+        return;
+      }
+      let background = this.getVideoBackground();
+      try {
+        try {
+          await applyVideoBackground(track, background);
+        } catch (error: unknown) {
+          if (
+            !(error instanceof VideoBackgroundImageError) ||
+            background.mode !== "image"
+          ) {
+            throw error;
+          }
+          log.warn("Unable to load the camera background image:", error);
+          this.failedVideoBackgroundImage = background.url;
+          ui.notifications?.warn(`${LANG_NAME}.videoBackgroundImageFailed`, {
+            localize: true,
+          });
+          background = this.getVideoBackground();
+          await applyVideoBackground(track, background);
+        }
+        log.info("Camera background applied:", background.mode);
+      } catch (error: unknown) {
+        log.error("Error applying the camera background", background, error);
+        this.videoBackgroundFailed = true;
+        await track.stopProcessor().catch((stopError: unknown) => {
+          log.warn("Error removing the camera background:", stopError);
+        });
+        ui.notifications?.warn(`${LANG_NAME}.videoBackgroundFailed`, {
+          localize: true,
+        });
+      }
+    });
+    return this.videoBackgroundQueue;
   }
 
   initializeRoom(): void {

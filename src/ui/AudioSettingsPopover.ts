@@ -15,6 +15,7 @@ import {
 } from "./controls";
 import { el, uniqueId } from "./dom";
 import { InputLevelMeter } from "./LevelMeter";
+import { videoBackgroundRow } from "./videoBackgroundControl";
 
 const log = new Logger("AudioSettingsPopover");
 
@@ -178,6 +179,10 @@ export default class AudioSettingsPopover {
             this.client.settings.set("client", "videoSrc", value);
           },
         }),
+      }),
+      videoBackgroundRow({
+        name: "livekit-video-background",
+        client: this.client,
       }),
       switchInput({
         label: localize("receiveVideo"),

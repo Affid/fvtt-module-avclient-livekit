@@ -21,7 +21,9 @@ export default defineConfig({
         chunkFileNames: (chunk) =>
           chunk.moduleIds.some((id) => id.includes("krisp-noise-filter"))
             ? "krisp-noise-filter-[hash].js"
-            : "[name]-[hash].js",
+            : chunk.moduleIds.some((id) => id.includes("track-processors"))
+              ? "video-background-[hash].js"
+              : "[name]-[hash].js",
       },
     },
     sourcemap: true,
@@ -80,6 +82,14 @@ export default defineConfig({
         {
           src: "module.json",
           dest: "",
+        },
+        // MediaPipe's WebAssembly runtime for the camera background effects.
+        // Every browser that can run them supports WebAssembly SIMD, so the
+        // larger non-SIMD fallback is left out.
+        {
+          src: "node_modules/@mediapipe/tasks-vision/wasm/vision_wasm_internal.*",
+          dest: "mediapipe",
+          rename: { stripBase: true },
         },
       ],
     }),

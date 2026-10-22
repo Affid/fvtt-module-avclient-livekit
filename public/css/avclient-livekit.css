@@ -81,6 +81,7 @@
   --lk-color-bg-selected: #404249;
   --lk-color-bg-overlay: rgba(0, 0, 0, 0.7);
   --lk-color-border: rgba(255, 255, 255, 0.06);
+  --lk-color-border-strong: rgba(255, 255, 255, 0.24);
 
   /* Text and icons */
   --lk-color-text: #dbdee1;
@@ -2369,4 +2370,64 @@
 /* The panel's size can't follow its buttons (it is a size container) */
 .livekit-dock.is-collapsed.horizontal > .livekit-dock-panel {
   width: 184px;
+}
+
+/* -------------------------------------------- */
+/*  Camera background                           */
+/* -------------------------------------------- */
+
+.livekit-video-background {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lk-space-3);
+}
+
+.livekit-background-choices {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+  gap: var(--lk-space-3);
+}
+
+.livekit-background-choice {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 16 / 9;
+  width: 100%;
+  height: auto;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  border: 2px solid transparent;
+  border-radius: var(--lk-radius-sm);
+  background: var(--lk-color-bg-tertiary);
+  color: var(--lk-color-text-muted);
+  font-size: 16px;
+  cursor: pointer;
+}
+
+.livekit-background-choice img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border: none;
+}
+
+.livekit-background-choice:hover {
+  border-color: var(--lk-color-border-strong);
+  color: var(--lk-color-text);
+}
+
+.livekit-background-choice[aria-pressed="true"] {
+  border-color: var(--lk-color-brand);
+}
+
+.livekit-background-choice:focus-visible {
+  outline: 2px solid var(--lk-color-focus);
+  outline-offset: 1px;
+}
+
+.livekit-background-pick {
+  border-style: dashed;
+  border-color: var(--lk-color-border-strong);
 }
