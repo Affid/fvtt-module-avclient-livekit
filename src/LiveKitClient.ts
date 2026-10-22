@@ -51,6 +51,7 @@ import VoiceActivityGate, {
 import { LANG_NAME, MODULE_NAME } from "./utils/constants";
 import {
   applyVideoBackground,
+  previewVideoBlur,
   supportsVideoBackground,
   videoBackgroundImageUrl,
   VideoBackgroundImageError,
@@ -357,8 +358,8 @@ export default class LiveKitClient {
     button.classList.toggle("active", model !== "none");
 
     const title =
-      game.i18n?.localize(`${LANG_NAME}.enhancedNoiseCancellation`) ??
-      "Noise Cancellation";
+      game.i18n?.localize(`${LANG_NAME}.noiseSuppressionModel`) ??
+      "Noise cancellation";
     let label = this.getNoiseModelLabel(model);
     // Show what is running instead when the selection isn't available
     const runningModel = this.getAudioProcessingConfig().model ?? "none";
@@ -627,13 +628,24 @@ export default class LiveKitClient {
   }
 
   /**
-   * The codec the microphone is sent with, e.g. "opus".
+   * The codec the microphone is sent with, e.g. "Opus", or "Opus with
+   * redundancy" when LiveKit sends each packet twice (RED).
    */
   getAudioCodec(): string | undefined {
-    return this.audioTrack?.sender
-      ?.getParameters()
-      .codecs.at(0)
-      ?.mimeType.replace(/^audio\//, "");
+    const codecs = this.audioTrack?.sender?.getParameters().codecs ?? [];
+    const name = (codec: RTCRtpCodecParameters | undefined) => {
+      const subtype = codec?.mimeType.replace(/^audio\//, "");
+      return subtype?.toLowerCase() === "opus" ? "Opus" : subtype;
+    };
+    const first = codecs.at(0);
+    if (first?.mimeType.toLowerCase() === "audio/red") {
+      return (
+        game.i18n?.format(`${LANG_NAME}.audioCodecRed`, {
+          codec: name(codecs.at(1)) ?? "Opus",
+        }) ?? "RED"
+      );
+    }
+    return name(first);
   }
 
   /**
@@ -1457,15 +1469,32 @@ export default class LiveKitClient {
     ) {
       return { mode: "none" };
     }
+    const quality =
+      game.settings?.get(MODULE_NAME, "videoBackgroundQuality") === "standard"
+        ? "standard"
+        : "high";
     if (mode === "image") {
       const url = videoBackgroundImageUrl(
         game.settings?.get(MODULE_NAME, "videoBackgroundImage") ?? "",
       );
       if (url !== this.failedVideoBackgroundImage) {
-        return { mode, url };
+        return { mode, url, quality };
       }
     }
-    return { mode: "blur" };
+    return {
+      mode: "blur",
+      strength: game.settings?.get(MODULE_NAME, "videoBlurStrength") ?? 0.5,
+      quality,
+    };
+  }
+
+  /**
+   * Try a blur strength out while its slider moves, before it is saved.
+   */
+  previewVideoBlur(strength: number): void {
+    previewVideoBlur(this.videoTrack, strength).catch((error: unknown) => {
+      log.warn("Error previewing the blur strength:", error);
+    });
   }
 
   /**

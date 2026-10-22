@@ -1,5 +1,19 @@
 # LiveKit A/V Client for FoundryVTT: Changelog
 
+## 0.6.8-krisp.12
+
+- Camera background:
+  - A blur strength slider, under Blur. The default blur is stronger than before.
+  - Quality, in Voice & Video Settings → Video: High (the default) uses MediaPipe's multiclass selfie model, which tells you from your background more cleanly, around your head and hair too; Standard is the lighter model of 0.6.8-krisp.11. High downloads 16 MB more the first time and uses more graphics power.
+  - The edge of the mask is steadier: it follows MediaPipe's confidence rather than a yes or no for each pixel, and is smoothed over time, so it no longer flickers with the camera's noise.
+- More consistent interface:
+  - The A/V settings window is now "Voice & Video Settings", and the voice panel's gear opens "Voice & video settings", which also covers your camera.
+  - Input mode is the same switch in the voice settings and the settings window.
+  - Dock position lists Floating with the sides, as the dock's own menu does, and the dock's settings are one group.
+  - "Show other players' video" reads the same in both places.
+  - Noise cancellation is called that everywhere, and labels use sentence case.
+  - Connection details show the quality as one word, the codec by name ("Opus with redundancy"), and the input mode with the input sensitivity only in Voice Activity mode.
+
 ## 0.6.8-krisp.11
 
 - Camera background, like Discord: blur what's behind you, or replace it with an image, under Background in the voice settings or in A/V Settings → Video. The images are Foundry's own fantasy and sci-fi art, or your own, picked with Foundry's file browser or by its address. Others see your video with the effect; it keeps going when you switch cameras or turn yours off and on.

@@ -15,7 +15,7 @@ const REFRESH_MS = 2000;
 /**
  * Details about the voice connection, opened from the voice panel's status:
  * ping, connection quality, the server and its region, the audio codec,
- * packet loss and jitter, the noise suppression and input sensitivity in use,
+ * packet loss and jitter, the noise cancellation, input mode and sensitivity in use,
  * and a button to reconnect.
  */
 export default class ConnectionPopover {
@@ -82,7 +82,7 @@ export default class ConnectionPopover {
       const quality = room?.localParticipant.connectionQuality ?? "unknown";
       rows.push([
         localize("connectionQualityLabel"),
-        game.i18n?.localize(`${LANG_NAME}.connectionQuality.${quality}`) ??
+        game.i18n?.localize(`${LANG_NAME}.connectionQualityLevel.${quality}`) ??
           quality,
       ]);
       const server = room?.serverInfo;
@@ -125,7 +125,14 @@ export default class ConnectionPopover {
         ? client.getNoiseModelLabel(model)
         : localize("noiseSuppressionOff"),
     ]);
-    rows.push([localize("inputSensitivity"), this.sensitivityLabel()]);
+    const pushToTalk = client.settings.client.voice.mode !== "always";
+    rows.push([
+      localize("inputMode"),
+      localize(pushToTalk ? "inputModePushToTalk" : "inputModeVoiceActivity"),
+    ]);
+    if (!pushToTalk) {
+      rows.push([localize("inputSensitivity"), this.sensitivityLabel()]);
+    }
 
     const titleId = uniqueId("title");
     this.popover.element.setAttribute("aria-labelledby", titleId);
@@ -163,9 +170,6 @@ export default class ConnectionPopover {
   }
 
   private sensitivityLabel(): string {
-    if (this.client.settings.client.voice.mode !== "always") {
-      return localize("inputModePushToTalk");
-    }
     const gate = this.client.voiceGate;
     if (!gate) {
       return localize("inputSensitivityOff");

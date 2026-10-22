@@ -12,7 +12,7 @@ import {
   getPushToTalkBindings,
   keybindRecorder,
   localize,
-  radioGroup,
+  segmentedControl,
   selectInput,
   setPushToTalkKey,
   settingRow,
@@ -79,7 +79,7 @@ export default class LiveKitAVConfig
     id: "av-config",
     classes: ["livekit-settings-app"],
     window: {
-      title: "WEBRTC.Title",
+      title: "LIVEKITAVCLIENT.settingsWindowTitle",
       icon: "fa-solid fa-headset",
       resizable: true,
     },
@@ -204,7 +204,7 @@ export default class LiveKitAVConfig
     const panes = new Map<string, HTMLElement>();
     const nav = el("nav", {
       className: "livekit-settings-nav",
-      attrs: { "aria-label": game.i18n?.localize("WEBRTC.Title") ?? "" },
+      attrs: { "aria-label": localize("settingsWindowTitle") },
     });
     for (const group of ["user", "world"] as const) {
       const groupSections = sections.filter(
@@ -556,7 +556,7 @@ export default class LiveKitAVConfig
       pushToTalkOptions.hidden = mode !== "ptt";
       sensitivity.hidden = mode !== "always";
     };
-    const inputMode = radioGroup({
+    const inputMode = segmentedControl({
       name: "core.rtcClientSettings.voice.mode",
       label: localize("inputMode"),
       value: client.voice.mode,
@@ -668,9 +668,17 @@ export default class LiveKitAVConfig
         videoBackgroundRow({
           name: `${MODULE_NAME}.videoBackground`,
           client: this.liveKitClient,
+          showQuality: true,
         }),
       ),
-      this.group(localize("videoReceiving"), this.clientSwitch("disableVideo")),
+      this.group(
+        localize("videoReceiving"),
+        switchInput({
+          name: "livekit.showVideo",
+          label: localize("receiveVideo"),
+          checked: !client.disableVideo,
+        }),
+      ),
     ];
   }
 
@@ -690,72 +698,83 @@ export default class LiveKitAVConfig
         }),
         this.moduleSwitch("displayConnectionQuality"),
       ),
-      this.group(
-        localize("appearanceDock"),
-        settingRow({
+      this.buildDock(client),
+    ];
+  }
+
+  /**
+   * The camera dock: where it is (with the Discord-style dock, floating is one
+   * of the positions, as in the dock's own menu), its layout, and what its
+   * camera views show.
+   */
+  private buildDock(
+    client: NonNullable<typeof game.webrtc>["settings"]["client"],
+  ): HTMLElement {
+    const discordDock = !!this.liveKitClient?.dock;
+    const floating =
+      discordDock &&
+      game.settings?.get(MODULE_NAME, "dockFloating").floating === true;
+    return this.group(
+      localize("appearanceDock"),
+      settingRow({
+        label: localize("clientSetting.dockPosition"),
+        control: selectInput({
+          name: "livekit.dockPlacement",
           label: localize("clientSetting.dockPosition"),
-          control: selectInput({
-            name: "core.rtcClientSettings.dockPosition",
-            label: localize("clientSetting.dockPosition"),
-            options: ["top", "right", "bottom", "left"].map((position) => ({
+          options: [
+            ...["left", "right", "top", "bottom"].map((position) => ({
               value: position,
               label: localize(`dockPosition.${position}`),
             })),
-            value: client.dockPosition,
-          }),
+            ...(discordDock
+              ? [{ value: "float", label: localize("dockFloating") }]
+              : []),
+          ],
+          value: floating ? "float" : client.dockPosition,
         }),
+      }),
+      discordDock &&
         settingRow({
-          label: localize("clientSetting.nameplates"),
+          label: localize("dockLayoutTitle"),
           control: selectInput({
-            name: "core.rtcClientSettings.nameplates",
-            label: localize("clientSetting.nameplates"),
-            dtype: "Number",
-            options: ["off", "both", "playerOnly", "characterOnly"].map(
-              (mode, index) => ({
-                value: index.toString(),
-                label: localize(`nameplates.${mode}`),
-              }),
-            ),
-            value: String(client.nameplates),
+            name: `${MODULE_NAME}.dockLayout`,
+            label: localize("dockLayoutTitle"),
+            options: ["grid", "focus", "compact"].map((layout) => ({
+              value: layout,
+              label: localize(`dockLayout.${layout}`),
+            })),
+            value: game.settings?.get(MODULE_NAME, "dockLayout") ?? "grid",
           }),
         }),
-        this.clientSwitch("borderColors"),
-        this.clientSwitch("hideDock"),
-        this.clientSwitch("hidePlayerList"),
-      ),
-      // The Discord-style dock's own options
-      !!this.liveKitClient?.dock &&
-        this.group(
-          localize("appearanceDiscordDock"),
-          settingRow({
-            label: localize("dockLayoutTitle"),
-            control: selectInput({
-              name: `${MODULE_NAME}.dockLayout`,
-              label: localize("dockLayoutTitle"),
-              options: ["grid", "focus", "compact"].map((layout) => ({
-                value: layout,
-                label: localize(`dockLayout.${layout}`),
-              })),
-              value: game.settings?.get(MODULE_NAME, "dockLayout") ?? "grid",
+      discordDock &&
+        this.moduleSwitch("dockFollowSpeaker", {
+          label: localize("dockFollowSpeaker"),
+          hint: localize("dockFollowSpeakerHint"),
+        }),
+      discordDock &&
+        this.moduleSwitch("voicePanelInDock", {
+          label: localize("voicePanelInDock"),
+          hint: localize("voicePanelInDockHint"),
+        }),
+      settingRow({
+        label: localize("clientSetting.nameplates"),
+        control: selectInput({
+          name: "core.rtcClientSettings.nameplates",
+          label: localize("clientSetting.nameplates"),
+          dtype: "Number",
+          options: ["off", "both", "playerOnly", "characterOnly"].map(
+            (mode, index) => ({
+              value: index.toString(),
+              label: localize(`nameplates.${mode}`),
             }),
-          }),
-          this.moduleSwitch("dockFollowSpeaker", {
-            label: localize("dockFollowSpeaker"),
-            hint: localize("dockFollowSpeakerHint"),
-          }),
-          this.moduleSwitch("voicePanelInDock", {
-            label: localize("voicePanelInDock"),
-            hint: localize("voicePanelInDockHint"),
-          }),
-          switchInput({
-            name: `${MODULE_NAME}.dockFloating.floating`,
-            label: localize("dockFloatingSetting"),
-            hint: localize("dockFloatingSettingHint"),
-            checked:
-              game.settings?.get(MODULE_NAME, "dockFloating").floating === true,
-          }),
-        ),
-    ];
+          ),
+          value: String(client.nameplates),
+        }),
+      }),
+      this.clientSwitch("borderColors"),
+      this.clientSwitch("hideDock"),
+      this.clientSwitch("hidePlayerList"),
+    );
   }
 
   private buildAdvanced(): (Node | false)[] {
@@ -1136,9 +1155,33 @@ export default class LiveKitAVConfig
     // Values that aren't settings of their own
     const extraData = (
       foundry.utils.expandObject(formData.object) as {
-        livekit?: { noiseModel?: string; pushToTalkKey?: string };
+        livekit?: {
+          noiseModel?: string;
+          pushToTalkKey?: string;
+          showVideo?: boolean;
+          dockPlacement?: string;
+        };
       }
     ).livekit;
+
+    // Shown as "show other players' video", stored as Foundry's opposite
+    if (extraData?.showVideo !== undefined) {
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+      coreData.rtcClientSettings.disableVideo = !extraData.showVideo;
+    }
+    // One list of dock positions, floating included, as in the dock's menu:
+    // Foundry's dock position, or the module's floating dock
+    if (extraData?.dockPlacement) {
+      const floating = extraData.dockPlacement === "float";
+      if (!floating) {
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+        coreData.rtcClientSettings.dockPosition = extraData.dockPlacement;
+      }
+      if (game.webrtc?.client._liveKitClient.dock) {
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+        liveKitData.dockFloating = { floating };
+      }
+    }
 
     // The noise model shown in the form, before the GM's default model below
     // may change what it resolves to

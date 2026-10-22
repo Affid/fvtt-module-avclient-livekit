@@ -179,6 +179,44 @@ export default function registerModuleSettings(): void {
     },
   });
 
+  // Which model tells the person from the background (see VideoBackground)
+  game.settings?.register(MODULE_NAME, "videoBackgroundQuality", {
+    scope: "client",
+    config: false,
+    default: "high",
+    type: new foundry.data.fields.StringField({
+      required: true,
+      blank: false,
+      initial: "high",
+      choices: { standard: "standard", high: "high" },
+    }),
+    onChange: () => {
+      void game.webrtc?.client._liveKitClient.updateVideoBackground({
+        retry: true,
+      });
+    },
+  });
+
+  // How strongly the background is blurred, from 0.1 to 1
+  game.settings?.register(MODULE_NAME, "videoBlurStrength", {
+    scope: "client",
+    config: false,
+    default: 0.5,
+    type: new foundry.data.fields.NumberField({
+      required: true,
+      nullable: false,
+      min: 0.1,
+      max: 1,
+      step: 0.05,
+      initial: 0.5,
+    }),
+    onChange: () => {
+      if (game.settings.get(MODULE_NAME, "videoBackground") === "blur") {
+        void game.webrtc?.client._liveKitClient.updateVideoBackground();
+      }
+    },
+  });
+
   // The user's own background image, kept while one of Foundry's is in use
   game.settings?.register(MODULE_NAME, "videoBackgroundCustomImage", {
     scope: "client",

@@ -6,30 +6,33 @@ import {
   VIDEO_BACKGROUND_PRESETS,
   videoBackgroundImageUrl,
 } from "../VideoBackground";
-import { localize, segmentedControl, settingRow } from "./controls";
+import { localize, segmentedControl, settingRow, slider } from "./controls";
 import { el, icon, setTooltip } from "./dom";
 
 const log = new Logger("videoBackgroundControl");
 
 /**
- * The camera background effect: none, blur, or an image, picked from
- * Foundry's own art or the user's. Changes apply right away. In the A/V
+ * The camera background effect: none, blur with its strength, or an image,
+ * picked from Foundry's own art or the user's. Changes apply right away. In the A/V
  * settings window the choice also has a form field (`name`), so saving the
  * form keeps it.
  */
 export function videoBackgroundRow({
   name,
   client,
+  showQuality = false,
 }: {
   name: string;
   client?: LiveKitClient;
+  /** Also offer the quality, which the full settings do */
+  showQuality?: boolean;
 }): HTMLElement {
   const container = el("div", { className: "livekit-video-background" });
   const render = () => {
     container.replaceChildren(...build());
   };
   const set = (
-    key: "videoBackground" | "videoBackgroundImage",
+    key: "videoBackground" | "videoBackgroundImage" | "videoBackgroundQuality",
     value: string,
   ) =>
     game.settings
@@ -79,12 +82,65 @@ export function videoBackgroundRow({
           onChange: (value) => void set("videoBackground", value),
         }),
       }),
+      ...(mode === "blur" ? [blurStrength(client)] : []),
       ...(mode === "image" ? [imageChoices(image, set)] : []),
+      ...(showQuality && mode !== "none"
+        ? [
+            settingRow({
+              label: localize("videoBackgroundQuality"),
+              hint: localize("videoBackgroundQualityHint"),
+              control: segmentedControl({
+                name: `${name}-quality`,
+                label: localize("videoBackgroundQuality"),
+                value:
+                  game.settings?.get(MODULE_NAME, "videoBackgroundQuality") ??
+                  "high",
+                options: [
+                  {
+                    value: "standard",
+                    label: localize("videoBackgroundQualityStandard"),
+                  },
+                  {
+                    value: "high",
+                    label: localize("videoBackgroundQualityHigh"),
+                  },
+                ],
+                onChange: (value) => void set("videoBackgroundQuality", value),
+              }),
+            }),
+          ]
+        : []),
     ];
   };
 
   render();
   return container;
+}
+
+/**
+ * How strongly to blur, tried out on the camera while the slider moves and
+ * saved once it is let go.
+ */
+function blurStrength(client: LiveKitClient | undefined): HTMLElement {
+  const strength = game.settings?.get(MODULE_NAME, "videoBlurStrength") ?? 0.5;
+  return slider({
+    label: localize("videoBlurStrength"),
+    min: 10,
+    max: 100,
+    step: 5,
+    value: Math.round(strength * 100),
+    format: (value) => `${Math.round(value).toString()}%`,
+    onInput: (value) => {
+      client?.previewVideoBlur(value / 100);
+    },
+    onChange: (value) => {
+      game.settings
+        ?.set(MODULE_NAME, "videoBlurStrength", value / 100)
+        .catch((error: unknown) => {
+          log.error("Error changing the blur strength:", error);
+        });
+    },
+  });
 }
 
 /**
