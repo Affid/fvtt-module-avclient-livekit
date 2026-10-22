@@ -600,7 +600,10 @@ export default class LiveKitCameraViews extends CameraViews {
 
   private readonly tileHost = {
     activate: (userId: string) => {
-      if (this.layout !== "compact") {
+      // In the slim bar, a click opens the dock again
+      if (this.collapsed) {
+        void this.setCollapsed(false);
+      } else if (this.layout !== "compact") {
         this.focus(userId);
       }
     },
