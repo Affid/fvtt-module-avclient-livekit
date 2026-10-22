@@ -55,15 +55,18 @@ separate, lazily loaded chunk (`video-background-*.js`), and uses:
 
 Its WebAssembly runtime is served from this module under `mediapipe/`.
 
-### MediaPipe Selfie Segmentation model
+### MediaPipe Selfie Segmentation models
 
 - License: Apache-2.0
 - Copyright Google LLC
 - https://storage.googleapis.com/mediapipe-assets/Model%20Card%20MediaPipe%20Selfie%20Segmentation.pdf
+- https://storage.googleapis.com/mediapipe-assets/Model%20Card%20Multiclass%20Segmentation.pdf
 
-Finds the person in each camera frame. Vendored as
-`public/mediapipe/selfie_segmenter.tflite` (float16, version 1); nothing is
-fetched from a third-party CDN at runtime.
+Find the person in each camera frame. Vendored as
+`public/mediapipe/selfie_segmenter.tflite` (Standard quality; float16,
+version 1) and `public/mediapipe/selfie_multiclass_256x256.tflite` (High
+quality; float32, version 1); nothing is fetched from a third-party CDN at
+runtime.
 
 ## @livekit/krisp-noise-filter
 

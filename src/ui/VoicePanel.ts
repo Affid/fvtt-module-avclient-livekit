@@ -75,7 +75,7 @@ export default class VoicePanel {
     // The menus open above the panel rather than over it
     this.noiseButton = iconButton({
       icon: "fa-wand-magic-sparkles",
-      label: localize("enhancedNoiseCancellation"),
+      label: localize("noiseSuppressionModel"),
       onClick: () => {
         this.client.noiseModelMenu.toggle(this.element, this.noiseButton);
       },

@@ -1,19 +1,44 @@
 import type { LocalVideoTrack, TrackProcessor, Track } from "livekit-client";
 import type {
   BackgroundProcessorWrapper,
+  BackgroundTransformer,
   SwitchBackgroundProcessorOptions,
 } from "@livekit/track-processors";
+import type { ImageSegmenterResult } from "@mediapipe/tasks-vision";
+import MaskSmoother from "./MaskSmoother";
 import { getModuleAssetRoute } from "./utils/helpers";
+import { Logger } from "./utils/logger";
+
+const log = new Logger("VideoBackground");
 
 type TrackProcessorsModule = typeof import("@livekit/track-processors");
 
 /** What is done with the background of the camera video */
 export type VideoBackgroundMode = "none" | "blur" | "image";
 
-/** The background effect to apply, with the image's URL for an image */
+/**
+ * How well the person is told from the background: MediaPipe's selfie model,
+ * or its multiclass selfie model, which knows hair and is cleaner around the
+ * head, but is 16 MB and takes more graphics power.
+ */
+export type VideoBackgroundQuality = "standard" | "high";
+
+const MODELS: Record<VideoBackgroundQuality, string> = {
+  standard: "mediapipe/selfie_segmenter.tflite",
+  high: "mediapipe/selfie_multiclass_256x256.tflite",
+};
+
+/**
+ * The background effect to apply: how strongly to blur (0 to 1), or the
+ * image's URL; and the quality
+ */
 export type VideoBackground =
-  | { mode: "none" | "blur" }
-  | { mode: "image"; url: string };
+  | { mode: "none" }
+  | { mode: "blur"; strength: number; quality: VideoBackgroundQuality }
+  | { mode: "image"; url: string; quality: VideoBackgroundQuality };
+
+/** The quality each running effect was started with */
+const processorQuality = new WeakMap<object, VideoBackgroundQuality>();
 
 /**
  * Backgrounds that come with Foundry itself: the art of its setup screen.
@@ -27,8 +52,12 @@ export const VIDEO_BACKGROUND_PRESETS: { path: string; label: string }[] = [
 /** The background image could not be loaded */
 export class VideoBackgroundImageError extends Error {}
 
-/** How strongly the background is blurred, in pixels of LiveKit's blur */
-const BLUR_RADIUS = 10;
+/**
+ * LiveKit's blur radius at full strength. It blurs a quarter-size copy of the
+ * frame with a Gaussian of a quarter of the radius, of up to 16 pixels each
+ * way, so 60 is about as strong as it gets.
+ */
+const MAX_BLUR_RADIUS = 60;
 
 let processorsModule: Promise<TrackProcessorsModule> | undefined;
 
@@ -103,7 +132,100 @@ function switchOptions(
 ): SwitchBackgroundProcessorOptions {
   return background.mode === "image"
     ? { mode: "virtual-background", imagePath: background.url }
-    : { mode: "background-blur", blurRadius: BLUR_RADIUS };
+    : {
+        mode: "background-blur",
+        blurRadius: Math.max(
+          6,
+          Math.round(MAX_BLUR_RADIUS * background.strength),
+        ),
+      };
+}
+
+/**
+ * Try a blur strength out on a blur that is running, e.g. while its slider
+ * moves. Nothing is done if the effect isn't blurring.
+ */
+export async function previewVideoBlur(
+  track: LocalVideoTrack | null,
+  strength: number,
+): Promise<void> {
+  const current = track?.getProcessor();
+  if (isBackgroundProcessor(current) && current.mode === "background-blur") {
+    await current.switchTo(
+      switchOptions({
+        mode: "blur",
+        strength,
+        quality: processorQuality.get(current) ?? "standard",
+      }),
+    );
+  }
+}
+
+/**
+ * Steady the mask over time (see MaskSmoother): have MediaPipe give its
+ * confidence of the person rather than a yes or no for each pixel, blend it
+ * with the masks before it, and hand LiveKit the result in place of the mask
+ * it would get.
+ *
+ * @returns Disposes of the smoother
+ */
+async function steadyMask(
+  transformer: BackgroundTransformer,
+): Promise<(() => void) | undefined> {
+  const segmenter = transformer.imageSegmenter;
+  const gl = transformer.canvas?.getContext("webgl2");
+  if (!segmenter || !gl) {
+    return undefined;
+  }
+  // A model with a "background" category (the multiclass selfie model) gives
+  // its confidence directly; the selfie model gives the person's, the last
+  // of its masks
+  const labels = segmenter.getLabels().map((label) => label.toLowerCase());
+  const backgroundIndex = labels.indexOf("background");
+  log.debug("Segmenter labels:", labels);
+  const smoother = new MaskSmoother(gl, backgroundIndex < 0);
+  try {
+    await segmenter.setOptions({
+      outputCategoryMask: false,
+      outputConfidenceMasks: true,
+    });
+  } catch (error: unknown) {
+    smoother.dispose();
+    throw error;
+  }
+  const segment = segmenter.segmentForVideo.bind(segmenter) as (
+    frame: VideoFrame,
+    timestamp: number,
+    callback: (result: ImageSegmenterResult) => void,
+  ) => void;
+  segmenter.segmentForVideo = ((
+    frame: VideoFrame,
+    timestamp: number,
+    callback: (result: unknown) => void,
+  ) => {
+    segment(frame, timestamp, (result) => {
+      const masks = result.confidenceMasks ?? [];
+      const mask = backgroundIndex < 0 ? masks.at(-1) : masks[backgroundIndex];
+      if (!mask) {
+        callback(result);
+        return;
+      }
+      const texture = smoother.update(
+        mask.getAsWebGLTexture(),
+        mask.width,
+        mask.height,
+      );
+      callback({
+        categoryMask: { getAsWebGLTexture: () => texture },
+        close: () => {
+          result.close();
+        },
+      });
+    });
+  }) as typeof segmenter.segmentForVideo;
+  return () => {
+    smoother.dispose();
+  };
 }
 
 /**
@@ -163,7 +285,10 @@ export async function applyVideoBackground(
   if (background.mode === "image") {
     await checkImage(background.url);
   }
-  if (isBackgroundProcessor(current)) {
+  if (
+    isBackgroundProcessor(current) &&
+    processorQuality.get(current) === background.quality
+  ) {
     await current.switchTo(switchOptions(background));
     return;
   }
@@ -173,17 +298,29 @@ export async function applyVideoBackground(
       ...switchOptions(background),
       assetPaths: {
         tasksVisionFileSet: getModuleAssetRoute("mediapipe"),
-        modelAssetPath: getModuleAssetRoute(
-          "mediapipe/selfie_segmenter.tflite",
-        ),
+        modelAssetPath: getModuleAssetRoute(MODELS[background.quality]),
       },
     },
     "livekit-video-background",
   );
+  processorQuality.set(processor, background.quality);
   // MediaPipe starts again whenever the camera restarts
   const transformer = processor.transformer;
   const init = transformer.init.bind(transformer);
-  transformer.init = (options) =>
-    withoutFoundryModuleGlobal(() => init(options));
+  const destroy = transformer.destroy.bind(transformer);
+  let disposeSmoother: (() => void) | undefined;
+  transformer.init = async (options) => {
+    await withoutFoundryModuleGlobal(() => init(options));
+    disposeSmoother = await steadyMask(transformer).catch((error: unknown) => {
+      // The mask stays as LiveKit makes it
+      log.warn("Unable to steady the camera background mask:", error);
+      return undefined;
+    });
+  };
+  transformer.destroy = async (options) => {
+    disposeSmoother?.();
+    disposeSmoother = undefined;
+    await destroy(options);
+  };
   await track.setProcessor(processor);
 }

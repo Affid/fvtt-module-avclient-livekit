@@ -1206,7 +1206,7 @@
   margin: 0 0 var(--lk-space-4);
 }
 
-.livekit-settings-section > .livekit-segmented {
+.livekit-settings-section > :is(.livekit-segmented, .livekit-video-background) {
   margin-bottom: var(--lk-space-4);
 }
 

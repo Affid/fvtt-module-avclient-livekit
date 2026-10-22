@@ -126,6 +126,20 @@ declare global {
     "avclient-livekit.videoBackgroundCustomImage": foundry.data.fields.StringField<{
       initial: string;
     }>;
+    "avclient-livekit.videoBackgroundQuality": foundry.data.fields.StringField<{
+      required: true;
+      blank: false;
+      initial: string;
+      choices: Record<string, string>;
+    }>;
+    "avclient-livekit.videoBlurStrength": foundry.data.fields.NumberField<{
+      required: true;
+      nullable: false;
+      min: number;
+      max: number;
+      step: number;
+      initial: number;
+    }>;
     "avclient-livekit.userVideoHidden": Record<string, boolean | undefined>;
     "avclient-livekit.userVolumes": Record<string, number | undefined>;
     "avclient-livekit.userLocalMutes": Record<string, boolean | undefined>;

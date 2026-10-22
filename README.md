@@ -30,7 +30,7 @@ This is a fork of [bekriebel/fvtt-module-avclient-livekit](https://github.com/be
 
 ## Configuration
 
-Install & enable the module then configure for your LiveKit instance under Audio/Video Configuration:
+Install & enable the module then configure for your LiveKit instance in the Voice & Video Settings window (Foundry's "Configure Audio/Video" button), under Server:
 
 **LiveKit Server:** Select an available option or _Custom_ for your own server  
 **LiveKit Server Address:** `rtc.example.com` \<Your LiveKit server address\>  
@@ -95,7 +95,7 @@ See [CHANGELOG](/CHANGELOG.md)
 By default, the module adds a Discord-style voice panel, the one place for
 your voice controls: connection status and ping, a disconnect button, and
 buttons to mute, deafen, turn your camera on or off, choose the noise
-cancellation model, and open the voice settings (devices, voice activity or
+cancellation model, and open the voice & video settings (devices, voice activity or
 push to talk, input sensitivity with a live level meter, camera, and whether to
 show other users' video). Click the connection status for details (ping,
 quality, server and region, codec, packet loss, noise cancellation and input
@@ -103,7 +103,7 @@ sensitivity) and to reconnect.
 
 The panel sits at the bottom of the camera dock, or in a column beside the
 tiles when the dock is at the top or bottom of the screen. Turn off "Voice panel in the dock"
-in the dock's layout menu or under A/V Settings → Appearance to make it a
+in the dock's layout menu or under Voice & Video Settings → Appearance to make it a
 floating panel above the player list instead; drag it by its status row to
 move it.
 
@@ -129,16 +129,16 @@ It also replaces Foundry's camera dock with its own:
   into a window of its own, or watch them picture-in-picture. The GM can also
   block a user's audio or video, and use the breakout rooms from there.
 
-Foundry's own A/V settings still apply: dock position and width, collapsing
+Foundry's own camera dock settings still apply: dock position and width, collapsing
 the dock, nameplates, player color borders, and hidden users.
 
-Turn this off under A/V Settings → Appearance (Foundry reloads to switch
-camera docks). The GM can turn it off for everyone under A/V Settings → Player
+Turn this off under Voice & Video Settings → Appearance (Foundry reloads to switch
+camera docks). The GM can turn it off for everyone under Voice & Video Settings → Player
 Options.
 
 ## Settings
 
-All audio/video settings are in one A/V Settings window, opened from Foundry's
+All audio/video settings are in one Voice & Video Settings window, opened from Foundry's
 "Configure Audio/Video" button, the voice panel, or the module's entry in
 Foundry's module settings list:
 
@@ -169,7 +169,7 @@ default open-source model is used instead.
 In Voice Activity mode, your microphone is only sent while you speak, like in
 Discord. By default the sensitivity is set automatically: the module learns
 the level of your background noise and sends audio that is clearly louder.
-Turn off "Automatically determine input sensitivity" in the voice settings to
+Turn off "Automatically determine input sensitivity" in the voice & video settings to
 set the threshold yourself on the level meter, which turns green while your
 voice is being sent. The input sensitivity works after noise cancellation, so
 it judges your voice rather than the noise, and the speaking ring shows
@@ -178,15 +178,20 @@ exactly when you are being heard. With push to talk, the key decides instead.
 ## Camera background
 
 Blur what's behind you, or replace it with an image, under Background in the
-voice settings (the gear in the voice panel) or in A/V Settings → Video. The
+voice & video settings (the gear in the voice panel) or in Voice & Video Settings → Video. The
 images to pick from are Foundry's own fantasy and sci-fi art, or your own:
 choose one with Foundry's file browser, or, if you may not browse files, enter
-its address. Others see your video with the effect.
+its address. Others see your video with the effect. Set how strongly to blur
+with the slider under Blur. In Voice & Video Settings → Video, Quality chooses
+between MediaPipe's multiclass selfie model (High, the default: cleaner around
+the head and hair, a 16 MB download and more graphics power) and its lighter
+selfie model (Standard).
 
 The effect runs on your computer with
 [LiveKit's track processors](https://github.com/livekit/track-processors-js)
-and Google's MediaPipe, from files that come with the module (about 10 MB,
-downloaded the first time you use it). It needs a recent browser with WebGL 2,
+and Google's MediaPipe, from files that come with the module (about 10 MB, or
+26 MB with High quality, downloaded the first time you use it). The edge of the
+mask is steadied over time, so it doesn't flicker with the camera's noise. It needs a recent browser with WebGL 2,
 and uses some of your computer's graphics power. If an image can't be loaded,
 your background is blurred instead.
 
