@@ -667,7 +667,7 @@ export default class LiveKitAVConfig
         localize("videoEffects"),
         videoBackgroundRow({
           name: `${MODULE_NAME}.videoBackground`,
-          failed: this.liveKitClient?.videoBackgroundFailed,
+          client: this.liveKitClient,
         }),
       ),
       this.group(localize("videoReceiving"), this.clientSwitch("disableVideo")),

@@ -52,7 +52,9 @@ import { LANG_NAME, MODULE_NAME } from "./utils/constants";
 import {
   applyVideoBackground,
   supportsVideoBackground,
-  type VideoBackgroundMode,
+  videoBackgroundImageUrl,
+  VideoBackgroundImageError,
+  type VideoBackground,
 } from "./VideoBackground";
 import LiveKitAVClient from "./LiveKitAVClient";
 import {
@@ -178,6 +180,8 @@ export default class LiveKitClient {
   videoTrack: LocalVideoTrack | null = null;
   /** The camera background effect failed to start; video is sent without it */
   videoBackgroundFailed = false;
+  /** The background image that couldn't be loaded; blur is used instead */
+  failedVideoBackgroundImage: string | undefined;
   private videoBackgroundQueue: Promise<void> = Promise.resolve();
   windowClickListener: EventListener | null = null;
 
@@ -1440,19 +1444,28 @@ export default class LiveKitClient {
   }
 
   /**
-   * The camera background effect to use: the setting, unless this browser
-   * can't run it or it failed to start.
+   * The camera background effect to use: the settings, unless this browser
+   * can't run it or it failed to start. An image that couldn't be loaded is
+   * replaced by blur, so the background stays hidden.
    */
-  getVideoBackgroundMode(): VideoBackgroundMode {
+  getVideoBackground(): VideoBackground {
     const mode = game.settings?.get(MODULE_NAME, "videoBackground");
     if (
-      mode !== "blur" ||
+      (mode !== "blur" && mode !== "image") ||
       this.videoBackgroundFailed ||
       !supportsVideoBackground()
     ) {
-      return "none";
+      return { mode: "none" };
     }
-    return mode;
+    if (mode === "image") {
+      const url = videoBackgroundImageUrl(
+        game.settings?.get(MODULE_NAME, "videoBackgroundImage") ?? "",
+      );
+      if (url !== this.failedVideoBackgroundImage) {
+        return { mode, url };
+      }
+    }
+    return { mode: "blur" };
   }
 
   /**
@@ -1466,17 +1479,34 @@ export default class LiveKitClient {
     this.videoBackgroundQueue = this.videoBackgroundQueue.then(async () => {
       if (retry) {
         this.videoBackgroundFailed = false;
+        this.failedVideoBackgroundImage = undefined;
       }
       const track = this.videoTrack;
       if (!track) {
         return;
       }
-      const mode = this.getVideoBackgroundMode();
+      let background = this.getVideoBackground();
       try {
-        await applyVideoBackground(track, mode);
-        log.info("Camera background applied:", mode);
+        try {
+          await applyVideoBackground(track, background);
+        } catch (error: unknown) {
+          if (
+            !(error instanceof VideoBackgroundImageError) ||
+            background.mode !== "image"
+          ) {
+            throw error;
+          }
+          log.warn("Unable to load the camera background image:", error);
+          this.failedVideoBackgroundImage = background.url;
+          ui.notifications?.warn(`${LANG_NAME}.videoBackgroundImageFailed`, {
+            localize: true,
+          });
+          background = this.getVideoBackground();
+          await applyVideoBackground(track, background);
+        }
+        log.info("Camera background applied:", background.mode);
       } catch (error: unknown) {
-        log.error("Error applying the camera background", mode, error);
+        log.error("Error applying the camera background", background, error);
         this.videoBackgroundFailed = true;
         await track.stopProcessor().catch((stopError: unknown) => {
           log.warn("Error removing the camera background:", stopError);

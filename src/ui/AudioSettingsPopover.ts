@@ -182,8 +182,7 @@ export default class AudioSettingsPopover {
       }),
       videoBackgroundRow({
         name: "livekit-video-background",
-        apply: true,
-        failed: this.client.videoBackgroundFailed,
+        client: this.client,
       }),
       switchInput({
         label: localize("receiveVideo"),
