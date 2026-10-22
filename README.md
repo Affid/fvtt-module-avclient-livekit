@@ -123,6 +123,11 @@ It also replaces Foundry's camera dock with its own:
   (a blue line shows it on hover), or let it float (drag it by its header,
   resize it by its corner), and collapse it to a slim bar of avatars. Change
   this from the button in the dock's header.
+- In Chrome and Edge, open the dock in its own always-on-top window (the
+  pop-out button in its header, or Own window in its menu), which you can move
+  anywhere, even onto another screen, and which stays on top of other apps.
+  Close the window, or pick another position, to put the dock back. Your voice
+  panel stays in Foundry meanwhile.
 - Hover your own tile to mute yourself or turn your camera on or off.
   Right-click another user's tile to change their volume (up to 200%), mute
   them or hide their video just for yourself, focus them, pop their tile out
