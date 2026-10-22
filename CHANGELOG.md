@@ -1,5 +1,15 @@
 # LiveKit A/V Client for FoundryVTT: Changelog
 
+## 0.6.8-krisp.7
+
+- The voice panel is the one place for your voice controls: it gains a camera button, and the voice settings gain a Video section (camera, and whether to show other users' video, which replaces Foundry's "disable receiving video" button).
+- Click the connection status in the voice panel for connection details: ping, quality, server and region, audio codec, packet loss, jitter, noise cancellation and input sensitivity, with a Reconnect button.
+- The player list shows a green ring around the color of whoever is speaking, and icons for users who are muted or deafened.
+- Changing the audio output device moves everyone's voice to it right away.
+- Fix speaking rings staying on after disconnecting or reconnecting.
+- Fix the camera button refusing to turn your camera off when the GM had blocked your video.
+- Audio-only worlds no longer show camera badges and buttons on the camera dock.
+
 ## 0.6.8-krisp.6
 
 - A Discord-style camera dock replaces Foundry's when the Discord-style interface is on (switching the interface now reloads Foundry):
