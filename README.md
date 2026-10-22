@@ -188,9 +188,9 @@ images to pick from are Foundry's own fantasy and sci-fi art, or your own:
 choose one with Foundry's file browser, or, if you may not browse files, enter
 its address. Others see your video with the effect. Set how strongly to blur
 with the slider under Blur. In Voice & Video Settings → Video, Quality chooses
-between MediaPipe's multiclass selfie model (High, the default: cleaner around
-the head and hair, a 16 MB download and more graphics power) and its lighter
-selfie model (Standard).
+between MediaPipe's lighter selfie model (Standard, the default) and its
+multiclass selfie model (High: cleaner around the head and hair, but a 16 MB
+download and much more graphics power, for fast computers only).
 
 The effect runs on your computer with
 [LiveKit's track processors](https://github.com/livekit/track-processors-js)

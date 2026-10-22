@@ -183,11 +183,11 @@ export default function registerModuleSettings(): void {
   game.settings?.register(MODULE_NAME, "videoBackgroundQuality", {
     scope: "client",
     config: false,
-    default: "high",
+    default: "standard",
     type: new foundry.data.fields.StringField({
       required: true,
       blank: false,
-      initial: "high",
+      initial: "standard",
       choices: { standard: "standard", high: "high" },
     }),
     onChange: () => {

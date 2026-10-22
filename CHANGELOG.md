@@ -1,5 +1,12 @@
 # LiveKit A/V Client for FoundryVTT: Changelog
 
+## 0.6.8-krisp.14
+
+- Reconnects by itself after losing the connection, like Discord, instead of staying disconnected once LiveKit's own short retries give up: it keeps trying, waiting a little longer each time (up to 30 seconds), and at once when the computer is back online. The voice panel shows "Reconnecting…", and its button stops it. Leaving on purpose, joining from another tab, or being removed from the room doesn't reconnect.
+- Failed attempts to connect no longer pile up permanent error messages while reconnecting.
+- Camera background quality is Standard by default; High is for fast computers only.
+- The 6 MB Krisp filter is only downloaded once Krisp is chosen, rather than on every connection to LiveKit Cloud.
+
 ## 0.6.8-krisp.13
 
 - The camera dock can open in its own always-on-top window, in Chrome and Edge (Document Picture-in-Picture): the pop-out button in the dock's header, or Own window in its menu. Move it anywhere, even onto another screen; it stays on top of other apps, and videos keep playing while Foundry is in the background. Close the window, or pick another position, to put the dock back. Your voice panel stays in Foundry meanwhile, and push to talk works while the window has focus.

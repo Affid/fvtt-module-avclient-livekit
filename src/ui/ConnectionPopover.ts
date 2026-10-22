@@ -184,6 +184,7 @@ export default class ConnectionPopover {
   private reconnect(): void {
     const master = this.client.avMaster;
     this.close();
+    this.client.cancelReconnect();
     master
       .disconnect()
       .then(() => master.connect())

@@ -94,7 +94,7 @@ export function videoBackgroundRow({
                 label: localize("videoBackgroundQuality"),
                 value:
                   game.settings?.get(MODULE_NAME, "videoBackgroundQuality") ??
-                  "high",
+                  "standard",
                 options: [
                   {
                     value: "standard",
