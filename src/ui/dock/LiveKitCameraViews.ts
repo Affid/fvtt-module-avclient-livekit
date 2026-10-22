@@ -34,6 +34,10 @@ const MAX_DOCK_WIDTH = 640;
 const MIN_FLOATING: Rect = { left: 0, top: 0, width: 240, height: 160 };
 // How long a new speaker must keep speaking before the focus follows them
 const FOLLOW_DELAY_MS = 800;
+/** Tiles are 16:9 */
+const TILE_ASPECT = 16 / 9;
+/** In the grid, tiles shrink to fit everyone down to this width, then scroll */
+const MIN_TILE_WIDTH = 120;
 
 /**
  * The parts of Foundry's CameraViews the dock builds on. The types know it
@@ -119,6 +123,10 @@ export default class LiveKitCameraViews extends CameraViews {
     () => localize("dockView"),
     () => this.viewMenuItems(),
   );
+  /** Fits the grid's tiles to the space the list has */
+  private readonly listObserver = new ResizeObserver(() => {
+    this.fitGrid();
+  });
 
   /* -------------------------------------------- */
   /*  State                                       */
@@ -311,6 +319,8 @@ export default class LiveKitCameraViews extends CameraViews {
       { capture: true },
     );
 
+    this.listObserver.observe(this.list);
+
     content.replaceChildren(
       header,
       el("div", {
@@ -384,6 +394,68 @@ export default class LiveKitCameraViews extends CameraViews {
       }) ?? count.toString();
     this.element.dataset.count = count.toString();
     this.updateTools();
+    this.fitGrid();
+  }
+
+  /**
+   * Size the grid's tiles as large as the space allows for the number of
+   * users, as Discord does: try each number of columns and keep the one with
+   * the largest 16:9 tiles. When even the best is too small, the tiles keep a
+   * minimum size and the list scrolls, down a vertical dock or along a
+   * horizontal one.
+   */
+  private fitGrid(): void {
+    const list = this.list;
+    const count = list.childElementCount;
+    if (this.layout !== "grid" || this.collapsed || !count) {
+      list.style.removeProperty("--lk-grid-columns");
+      list.style.removeProperty("--lk-tile-width");
+      return;
+    }
+    const gap = parseFloat(getComputedStyle(list).columnGap) || 0;
+    const width = list.clientWidth;
+    const height = list.clientHeight;
+    if (!width || !height) {
+      return;
+    }
+
+    let columns = 1;
+    let tileWidth = 0;
+    for (let tryColumns = 1; tryColumns <= count; tryColumns++) {
+      const rows = Math.ceil(count / tryColumns);
+      const fit = Math.min(
+        (width - gap * (tryColumns - 1)) / tryColumns,
+        ((height - gap * (rows - 1)) / rows) * TILE_ASPECT,
+      );
+      if (fit > tileWidth) {
+        columns = tryColumns;
+        tileWidth = fit;
+      }
+    }
+    if (tileWidth < MIN_TILE_WIDTH) {
+      if (this.isHorizontal) {
+        // As many rows as fit, scrolling sideways
+        const minHeight = MIN_TILE_WIDTH / TILE_ASPECT;
+        const rows = Math.max(
+          1,
+          Math.floor((height + gap) / (minHeight + gap)),
+        );
+        columns = Math.ceil(count / rows);
+        tileWidth = ((height - gap * (rows - 1)) / rows) * TILE_ASPECT;
+      } else {
+        // As many columns as fit, scrolling down
+        columns = Math.max(
+          1,
+          Math.floor((width + gap) / (MIN_TILE_WIDTH + gap)),
+        );
+        tileWidth = (width - gap * (columns - 1)) / columns;
+      }
+    }
+    list.style.setProperty("--lk-grid-columns", columns.toString());
+    list.style.setProperty(
+      "--lk-tile-width",
+      `${Math.max(Math.floor(tileWidth), 1).toString()}px`,
+    );
   }
 
   /**

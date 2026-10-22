@@ -1544,6 +1544,12 @@
   color: var(--lk-color-text);
 }
 
+/* Above the interface, whose collapsed sidebar slides out past its right
+   edge, over a dock on the right. Below application windows. */
+#camera-views.livekit-dock:not(.is-floating) {
+  z-index: calc(var(--z-index-app) + 1);
+}
+
 #camera-views.livekit-dock[data-placement="left"] {
   border-right: 1px solid var(--lk-color-border);
 }
@@ -1648,26 +1654,60 @@
   height: 100%;
 }
 
-/* Focus: one user large, the others in a strip */
-.livekit-dock[data-layout="focus"] .livekit-dock-stage {
-  display: flex;
-  flex: 1 1 auto;
+/* Grid: the dock picks the number of columns and the tile size that fit
+   everyone largest (LiveKitCameraViews#fitGrid) */
+.livekit-dock[data-layout="grid"]:not(.is-collapsed) .livekit-dock-list {
+  display: grid;
+  flex: 1 1 0;
+  grid-template-columns: repeat(
+    var(--lk-grid-columns, 1),
+    var(--lk-tile-width, 1fr)
+  );
+  grid-auto-rows: max-content;
+  place-content: safe center;
   min-width: 0;
   min-height: 0;
+  height: auto;
+  overflow: auto;
+}
+
+.livekit-dock[data-layout="grid"]:not(.is-collapsed)
+  .livekit-dock-list
+  .livekit-tile {
+  height: auto;
+}
+
+/* The tiles size themselves from the space the dock body has */
+.livekit-dock:not(.is-collapsed) .livekit-dock-body {
+  container-type: size;
+}
+
+/* Focus: one user large, the others in a strip, centered together. The large
+   tile is the largest 16:9 that fits, and shows the whole video. */
+.livekit-dock[data-layout="focus"] .livekit-dock-body {
+  justify-content: safe center;
+}
+
+.livekit-dock[data-layout="focus"] .livekit-dock-stage {
+  display: flex;
+  flex: 0 1 calc(100cqw * 9 / 16);
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  min-height: 0;
+  container-type: size;
+}
+
+.livekit-dock.horizontal[data-layout="focus"] .livekit-dock-stage {
+  flex-basis: calc(100cqh * 16 / 9);
 }
 
 .livekit-dock-stage .livekit-tile {
-  flex: 1;
-  min-height: 0;
+  width: min(100cqw, 100cqh * 16 / 9);
 }
 
-.livekit-dock.is-floating[data-layout="focus"]
-  .livekit-dock-stage
-  .livekit-tile,
-.livekit-dock.horizontal[data-layout="focus"]
-  .livekit-dock-stage
-  .livekit-tile {
-  aspect-ratio: auto;
+.livekit-dock-stage .livekit-tile video.user-camera {
+  object-fit: contain;
 }
 
 .livekit-dock[data-layout="focus"] .livekit-dock-list {
@@ -1689,8 +1729,18 @@
   height: 72px;
 }
 
+/* On the top or bottom, the others are in two rows of half height, so the
+   user in focus is larger */
 .livekit-dock.horizontal[data-layout="focus"] .livekit-dock-list {
+  display: grid;
+  grid-template-rows: repeat(2, max-content);
+  grid-auto-flow: column;
+  align-content: center;
   height: 100%;
+}
+
+.livekit-dock.horizontal[data-layout="focus"] .livekit-dock-list .livekit-tile {
+  height: calc((100cqh - var(--lk-space-4)) / 2);
 }
 
 /* Tiles */
@@ -2183,6 +2233,7 @@
 .livekit-dock-panel {
   flex: none;
   border-top: 1px solid var(--lk-color-border);
+  container: livekit-dock-panel / inline-size;
 }
 
 .livekit-dock-panel:empty {
@@ -2232,10 +2283,48 @@
 .livekit-dock.horizontal > .livekit-dock-panel {
   grid-row: 2;
   grid-column: 2;
-  width: 300px;
-  overflow: auto;
+  width: 220px;
+  overflow: hidden auto;
   border-top: none;
   border-left: 1px solid var(--lk-color-border);
+  container-type: size;
+}
+
+/* The column stacks the status, the user and the buttons down its height,
+   leaving out the user and then the status' second line when it is short */
+.livekit-dock.horizontal:not(.is-collapsed) .livekit-voice-panel.is-docked {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+}
+
+.livekit-dock.horizontal:not(.is-collapsed)
+  .livekit-voice-panel.is-docked
+  .livekit-panel-user {
+  flex: 1;
+  align-content: space-between;
+}
+
+@container livekit-dock-panel (max-height: 139px) {
+  .livekit-dock.horizontal:not(.is-collapsed)
+    .livekit-voice-panel.is-docked
+    :is(.livekit-panel-avatar, .livekit-panel-user-info) {
+    display: none;
+  }
+
+  .livekit-dock.horizontal:not(.is-collapsed)
+    .livekit-voice-panel.is-docked
+    .livekit-panel-user {
+    align-content: center;
+  }
+}
+
+@container livekit-dock-panel (max-height: 99px) {
+  .livekit-dock.horizontal:not(.is-collapsed)
+    .livekit-voice-panel.is-docked
+    .livekit-panel-subtext {
+    display: none;
+  }
 }
 
 /* In the slim bar, only the buttons */
