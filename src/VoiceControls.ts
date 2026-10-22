@@ -65,7 +65,8 @@ export default class VoiceControls {
   toggleCamera(): void {
     const settings = this.client.settings.getUser(this.userId);
     const hidden = settings?.hidden === true;
-    if (!hidden && settings?.canBroadcastVideo === false) {
+    // Turning the camera on needs the permission to broadcast video
+    if (hidden && !settings.canBroadcastVideo) {
       ui.notifications?.warn("WEBRTC.WarningCannotEnableVideo", {
         localize: true,
       });

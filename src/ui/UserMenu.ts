@@ -174,6 +174,7 @@ export default class UserMenu {
       !isSelf && {
         type: "action",
         label: localize("hideFromDock"),
+        detail: localize("hideFromDockHint"),
         icon: "fa-user-slash",
         onSelect: async () => {
           game.webrtc?.settings.set("client", `users.${userId}.blocked`, true);

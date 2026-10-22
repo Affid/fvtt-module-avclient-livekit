@@ -46,6 +46,8 @@ export interface TileState {
   borderColor: boolean;
   /** The tile is the large one of the focus layout */
   focused: boolean;
+  /** The world uses video */
+  cameraUsed: boolean;
 }
 
 /**
@@ -225,7 +227,7 @@ export default class CameraTile {
     }
     if (state.videoHiddenByMe) {
       badges.push({ icon: "fa-eye-slash", label: localize("videoHiddenByMe") });
-    } else if (!context.hasVideo) {
+    } else if (state.cameraUsed && !context.hasVideo) {
       badges.push({ icon: "fa-video-slash", label: localize("cameraIsOff") });
     }
     this.badges.replaceChildren(...badges.map((options) => badge(options)));
@@ -248,6 +250,7 @@ export default class CameraTile {
       });
     }
     if (this.videoButton) {
+      this.videoButton.hidden = !state.cameraUsed;
       const videoOff = !context.hasVideo;
       setIconButtonState(this.videoButton, {
         icon: videoOff ? "fa-video-slash" : "fa-video",

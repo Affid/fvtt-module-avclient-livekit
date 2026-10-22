@@ -47,9 +47,6 @@ interface CameraViewsBase {
   readonly isHorizontal: boolean;
   render(options?: object): Promise<unknown>;
   _prepareUserContext(userId: string): UserContext | undefined;
-  _onToggleVideo(event: Event, target: HTMLElement): Promise<unknown>;
-  _onBlockAudio(event: Event, target: HTMLElement): Promise<unknown>;
-  _onBlockVideo(event: Event, target: HTMLElement): Promise<unknown>;
   _onRender(context: object, options: object): Promise<void>;
   _onFirstRender(context: object, options: object): Promise<void>;
   _configureRenderOptions(options: object): void;
@@ -412,7 +409,7 @@ export default class LiveKitCameraViews extends CameraViews {
     }
     window.clearTimeout(this.followTimer);
     this.followTimer = window.setTimeout(() => {
-      if (this.client?.isUserSpeaking(userId)) {
+      if (this.layout === "focus" && this.client?.isUserSpeaking(userId)) {
         this.focus(userId);
       }
     }, FOLLOW_DELAY_MS);
@@ -439,6 +436,7 @@ export default class LiveKitCameraViews extends CameraViews {
       quality,
       borderColor: game.webrtc?.settings.client.borderColors === true,
       focused: this.layout === "focus" && userId === this.focusUserId,
+      cameraUsed: client?.voiceControls.canUseCamera() ?? true,
     };
   }
 
@@ -447,11 +445,13 @@ export default class LiveKitCameraViews extends CameraViews {
    * other user with video, else the first other user, else ourselves.
    */
   private defaultFocus(contexts: UserContext[]): string | undefined {
-    const others = contexts.filter((context) => !context.local);
+    // Popped out users have windows of their own
+    const docked = contexts.filter((context) => !context.settings.popout);
+    const others = docked.filter((context) => !context.local);
     const choice =
       others.find((context) => context.hasVideo) ??
       others.at(0) ??
-      contexts.at(0);
+      docked.at(0);
     return choice?.user.id ?? undefined;
   }
 
@@ -614,15 +614,7 @@ export default class LiveKitCameraViews extends CameraViews {
       this.client?.voiceControls.toggleMute();
     },
     toggleOwnVideo: () => {
-      const tile = this.tiles.get(game.user?.id ?? "");
-      if (tile) {
-        // Foundry's own handler, which checks the user may share video
-        this._onToggleVideo(new Event("click"), tile.element).catch(
-          (error: unknown) => {
-            log.error("Error toggling the camera:", error);
-          },
-        );
-      }
+      this.client?.voiceControls.toggleCamera();
     },
   };
 
@@ -640,6 +632,7 @@ export default class LiveKitCameraViews extends CameraViews {
   }
 
   async setLayout(layout: DockLayout): Promise<void> {
+    window.clearTimeout(this.followTimer);
     await game.settings?.set(MODULE_NAME, "dockLayout", layout);
     await this.render();
   }

@@ -1547,9 +1547,15 @@ export default class LiveKitClient {
     }
     ui.notifications?.warn(disconnectWarning);
 
-    // Clear the participant map
+    // Clear the participant map. LiveKit tells nothing more about the other
+    // participants, so nobody is speaking any more.
     this.liveKitParticipants.clear();
     this.userAudioMixer.stopAll();
+    for (const userId of [...this.speakingUsers]) {
+      this.onIsSpeakingChanged(userId, false);
+    }
+    this.playersList.refresh();
+    this.dock?.refresh();
 
     // Set connection buttons state
     this.setConnectionButtons(false);

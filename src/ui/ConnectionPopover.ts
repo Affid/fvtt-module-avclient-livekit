@@ -23,6 +23,8 @@ export default class ConnectionPopover {
     window.clearInterval(this.timer);
   });
   private timer?: number;
+  /** Counts opening and closing, so a slow first render can tell it was closed */
+  private generation = 0;
 
   constructor(private readonly client: LiveKitClient) {}
 
@@ -36,11 +38,16 @@ export default class ConnectionPopover {
    */
   toggle(anchor: HTMLElement, control: HTMLElement): void {
     if (this.popover.isOpen) {
-      this.popover.close();
+      this.close();
       return;
     }
+    const generation = ++this.generation;
     void this.render().then(() => {
+      if (generation !== this.generation) {
+        return;
+      }
       this.popover.openAt(anchor, control);
+      window.clearInterval(this.timer);
       this.timer = window.setInterval(() => {
         void this.render();
       }, REFRESH_MS);
@@ -48,6 +55,8 @@ export default class ConnectionPopover {
   }
 
   close(): void {
+    this.generation += 1;
+    window.clearInterval(this.timer);
     this.popover.close();
   }
 

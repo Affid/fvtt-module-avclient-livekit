@@ -11,6 +11,8 @@ const log = new Logger("VoicePanel");
 
 const PING_INTERVAL_MS = 2000;
 const MARGIN = 8;
+// How far the pointer moves before the status row starts dragging the panel
+const DRAG_THRESHOLD = 4;
 
 /**
  * A Discord-style voice panel: connection status and ping, a disconnect
@@ -356,19 +358,40 @@ export default class VoicePanel {
     this.position();
   };
 
+  /**
+   * Move the panel by dragging its status row, including the status itself:
+   * a drag starts once the pointer moves a little, so a click still opens the
+   * connection details.
+   */
   private makeDraggable(handle: HTMLElement): void {
     handle.addEventListener("pointerdown", (event) => {
-      if (event.button !== 0 || (event.target as Element).closest("button")) {
+      const target = event.target as Element;
+      if (
+        event.button !== 0 ||
+        target.closest("button:not(.livekit-panel-status-info)")
+      ) {
         return;
       }
-      event.preventDefault();
       const start = this.element.getBoundingClientRect();
       const offsetX = event.clientX - start.left;
       const offsetY = event.clientY - start.top;
-      handle.setPointerCapture(event.pointerId);
-      this.element.classList.add("dragging");
+      let dragging = false;
 
       const onMove = (moveEvent: PointerEvent) => {
+        if (
+          !dragging &&
+          Math.hypot(
+            moveEvent.clientX - event.clientX,
+            moveEvent.clientY - event.clientY,
+          ) < DRAG_THRESHOLD
+        ) {
+          return;
+        }
+        if (!dragging) {
+          dragging = true;
+          handle.setPointerCapture(event.pointerId);
+          this.element.classList.add("dragging");
+        }
         this.element.style.left = `${clamp(moveEvent.clientX - offsetX, MARGIN, window.innerWidth - start.width - MARGIN).toString()}px`;
         this.element.style.top = `${clamp(moveEvent.clientY - offsetY, MARGIN, window.innerHeight - start.height - MARGIN).toString()}px`;
       };
@@ -376,6 +399,17 @@ export default class VoicePanel {
         handle.removeEventListener("pointermove", onMove);
         handle.removeEventListener("pointerup", onUp);
         handle.removeEventListener("pointercancel", onUp);
+        if (!dragging) {
+          return;
+        }
+        // The click that ends a drag doesn't open the connection details
+        handle.addEventListener(
+          "click",
+          (clickEvent) => {
+            clickEvent.stopPropagation();
+          },
+          { capture: true, once: true },
+        );
         this.element.classList.remove("dragging");
         const { left, top } = this.element.getBoundingClientRect();
         game.settings

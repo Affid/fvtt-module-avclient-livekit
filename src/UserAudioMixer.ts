@@ -106,7 +106,17 @@ export default class UserAudioMixer {
     const boost = !!boostTrack;
 
     const audioElements = this.client.getUserAudioElements(userId);
+    // The elements outlive renders, so follow output device changes here
+    // Browsers name the default device ""
+    const setting = this.client.settings.client.audioSink;
+    const sink = setting === "default" ? "" : setting;
+    const canPickSink = "setSinkId" in HTMLMediaElement.prototype;
     for (const audioElement of audioElements) {
+      if (canPickSink && audioElement.sinkId !== sink) {
+        audioElement.setSinkId(sink).catch((error: unknown) => {
+          log.warn("Unable to change the audio output device:", error);
+        });
+      }
       const isMicrophone = audioElement.classList.contains(
         `user-${Track.Source.Microphone}-audio`,
       );

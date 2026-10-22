@@ -69,6 +69,7 @@
   "LIVEKITAVCLIENT.hideVideoForMe": "Hide video for me",
   "LIVEKITAVCLIENT.videoHiddenByMe": "Video hidden for you",
   "LIVEKITAVCLIENT.hideFromDock": "Hide from the dock",
+  "LIVEKITAVCLIENT.hideFromDockHint": "Also mutes them. Show them again from the player list.",
   "LIVEKITAVCLIENT.gameMaster": "Game Master",
   "LIVEKITAVCLIENT.blockAudio": "Block audio",
   "LIVEKITAVCLIENT.blockVideo": "Block video",
