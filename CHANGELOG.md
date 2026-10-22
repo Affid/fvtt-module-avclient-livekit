@@ -1,5 +1,10 @@
 # LiveKit A/V Client for FoundryVTT: Changelog
 
+## 0.6.8-krisp.13
+
+- The camera dock can open in its own always-on-top window, in Chrome and Edge (Document Picture-in-Picture): the pop-out button in the dock's header, or Own window in its menu. Move it anywhere, even onto another screen; it stays on top of other apps, and videos keep playing while Foundry is in the background. Close the window, or pick another position, to put the dock back. Your voice panel stays in Foundry meanwhile, and push to talk works while the window has focus.
+- Menus and popovers open in the window they were opened from.
+
 ## 0.6.8-krisp.12
 
 - Camera background:
