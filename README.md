@@ -91,19 +91,49 @@ See [CHANGELOG](/CHANGELOG.md)
 
 ## Discord-style interface
 
-By default, the module adds a Discord-style voice panel above the player list:
-connection status and ping, a disconnect button, and buttons to mute, deafen,
-choose the noise cancellation model, and open the voice settings (devices,
-voice activity or push to talk, input sensitivity with a live level meter).
-Drag the panel by its status row to move it.
+By default, the module adds a Discord-style voice panel, the one place for
+your voice controls: connection status and ping, a disconnect button, and
+buttons to mute, deafen, turn your camera on or off, choose the noise
+cancellation model, and open the voice settings (devices, voice activity or
+push to talk, input sensitivity with a live level meter, camera, and whether to
+show other users' video). Click the connection status for details (ping,
+quality, server and region, codec, packet loss, noise cancellation and input
+sensitivity) and to reconnect.
 
-Camera views get a green ring around whoever is speaking, show the user's
-avatar while their camera is off, and show when a user is muted or deafened.
-Right-click another user's camera view to change their volume (up to 200%) or
-mute them just for yourself.
+The panel sits at the bottom of the camera dock, or beside the tiles when the
+dock is at the top or bottom of the screen. Turn off "Voice panel in the dock"
+in the dock's layout menu or under A/V Settings → Appearance to make it a
+floating panel above the player list instead; drag it by its status row to
+move it.
 
-Turn this off under A/V Settings → Appearance. The GM can turn it off for
-everyone under A/V Settings → Player Options.
+The player list shows who is speaking with a green ring around their color,
+and whether they are muted or deafened.
+
+It also replaces Foundry's camera dock with its own:
+
+- Each user's tile shows their video, or their avatar while their camera is
+  off, a green ring while they speak, and badges when they are muted,
+  deafened, muted by you, or have their camera off. Hover a tile for its
+  connection quality.
+- Three layouts: a grid, one user in focus with the others in a strip (click a
+  tile to focus it, or let the focus follow whoever speaks), and a compact list
+  of avatars like a Discord voice channel.
+- Dock it on any side of the screen and resize it by dragging its inner edge
+  (a blue line shows it on hover), or let it float (drag it by its header,
+  resize it by its corner), and collapse it to a slim bar of avatars. Change
+  this from the button in the dock's header.
+- Hover your own tile to mute yourself or turn your camera on or off.
+  Right-click another user's tile to change their volume (up to 200%), mute
+  them or hide their video just for yourself, focus them, pop their tile out
+  into a window of its own, or watch them picture-in-picture. The GM can also
+  block a user's audio or video, and use the breakout rooms from there.
+
+Foundry's own A/V settings still apply: dock position and width, collapsing
+the dock, nameplates, player color borders, and hidden users.
+
+Turn this off under A/V Settings → Appearance (Foundry reloads to switch
+camera docks). The GM can turn it off for everyone under A/V Settings → Player
+Options.
 
 ## Settings
 
@@ -131,8 +161,18 @@ When connected to a [LiveKit Cloud](https://livekit.io/cloud) server, **Krisp**
 is also offered. It is LiveKit's noise filter: it requires a supported browser
 (older Safari versions are not), and the browser downloads its models from
 `integrations.livekit.io`. If Krisp is not available or fails to start, the
-default open-source model is used instead. Auto gain control and the noise
-gate are not used while Krisp is active.
+default open-source model is used instead.
+
+## Input sensitivity
+
+In Voice Activity mode, your microphone is only sent while you speak, like in
+Discord. By default the sensitivity is set automatically: the module learns
+the level of your background noise and sends audio that is clearly louder.
+Turn off "Automatically determine input sensitivity" in the voice settings to
+set the threshold yourself on the level meter, which turns green while your
+voice is being sent. The input sensitivity works after noise cancellation, so
+it judges your voice rather than the noise, and the speaking ring shows
+exactly when you are being heard. With push to talk, the key decides instead.
 
 ## Third-party notices
 

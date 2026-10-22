@@ -1,106 +1,22 @@
+/* -------------------------------------------- */
+/*  Foundry's camera dock                       */
+/* -------------------------------------------- */
+
 .camera-view .av-control.toggle .fa-closed-captioning.active {
   color: #fff;
 }
 
-.camera-view .av-control.livekit-control.hidden {
+.av-control.livekit-control.hidden {
   display: none;
 }
 
-.camera-view .av-control.livekit-control.disabled {
+.av-control.livekit-control.disabled {
   pointer-events: none;
 }
 
 /* Enhanced noise cancellation model selector button */
-.camera-view .av-control.livekit-noise-control.active {
+.av-control.livekit-noise-control.active {
   color: #50ffff;
-}
-
-/* Noise suppression model selection menu */
-.livekit-noise-menu {
-  position: fixed;
-  z-index: 1000;
-  min-width: 180px;
-  padding: 4px;
-  background: var(--color-cool-5, #1b1d24);
-  border: 1px solid var(--color-border-dark, #000);
-  border-radius: 6px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.6);
-  color: var(--color-text-light-highlight, #f0f0e0);
-  font-size: var(--font-size-13, 13px);
-}
-
-.livekit-noise-menu-header {
-  padding: 4px 8px 6px;
-  font-weight: bold;
-  text-transform: uppercase;
-  font-size: var(--font-size-11, 11px);
-  opacity: 0.7;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-  margin-bottom: 4px;
-}
-
-.livekit-noise-menu-item {
-  display: flex;
-  align-items: center;
-  justify-content: flex-start;
-  gap: 6px;
-  width: 100%;
-  padding: 5px 8px;
-  background: transparent;
-  border: none;
-  border-radius: 4px;
-  color: inherit;
-  text-align: left;
-  line-height: 1.4;
-  cursor: pointer;
-}
-
-.livekit-noise-menu-item:hover {
-  background: var(--color-hover-bg, rgba(255, 255, 255, 0.1));
-}
-
-.livekit-noise-menu-item.active {
-  color: #50ffff;
-}
-
-.livekit-noise-menu-item .fa-check,
-.livekit-noise-menu-item.toggle.active .fa-square-check {
-  color: #50ffff;
-}
-
-.livekit-noise-menu-detail {
-  display: block;
-  font-size: var(--font-size-11, 11px);
-  opacity: 0.7;
-}
-
-.livekit-noise-menu-item.disabled,
-.livekit-noise-menu-item:disabled {
-  opacity: 0.4;
-  cursor: default;
-  pointer-events: none;
-}
-
-.livekit-noise-menu-divider {
-  height: 1px;
-  margin: 4px 0;
-  background: rgba(255, 255, 255, 0.1);
-}
-
-.livekit-noise-menu-subheader {
-  padding: 2px 8px 4px;
-  font-weight: bold;
-  text-transform: uppercase;
-  font-size: var(--font-size-11, 11px);
-  opacity: 0.7;
-}
-
-.livekit-noise-menu-item.reset {
-  opacity: 0.85;
-}
-
-.livekit-noise-menu-item.reset:hover {
-  opacity: 1;
 }
 
 .camera-view .connection-quality-indicator {
@@ -130,30 +46,6 @@
   background-color: #f0f0e0;
 }
 
-.camera-view .status-remote-hidden,
-.camera-view .status-remote-muted {
-  font-size: 20px;
-  width: 30px;
-  line-height: 30px;
-  color: #ba2200;
-}
-.camera-view .status-remote-hidden.hidden,
-.camera-view .status-remote-muted.hidden,
-.camera-view .status-remote-ptt.hidden {
-  display: none;
-}
-
-.camera-view .status-remote-ptt {
-  font-size: 20px;
-  width: 30px;
-  line-height: 30px;
-  color: gray;
-}
-
-.camera-view .status-remote-ptt.active {
-  color: greenyellow;
-}
-
 .camera-view .control-bar.left {
   z-index: 30;
 }
@@ -170,69 +62,227 @@
   transform: scaleX(-1);
 }
 
-#av-config .form-fields > button {
-  flex-basis: 100%;
-}
-
 /* -------------------------------------------- */
-/*  Discord-style interface                     */
+/*  Design tokens                               */
 /* -------------------------------------------- */
 
+/* Every part of the Discord-style interface takes its colors, sizes and
+   motion from these. The palette is always dark, also with Foundry's light
+   theme, as the interface draws its own surfaces. */
 :root {
-  --livekit-bg-floating: #111214;
-  --livekit-bg-panel: #232428;
-  --livekit-bg-input: #1e1f22;
-  --livekit-bg-hover: rgba(78, 80, 88, 0.3);
-  --livekit-bg-active: rgba(78, 80, 88, 0.6);
-  --livekit-text: #dbdee1;
-  --livekit-text-muted: #949ba4;
-  --livekit-text-header: #f2f3f5;
-  --livekit-green: #23a55a;
-  --livekit-red: #f23f43;
-  --livekit-yellow: #f0b232;
-  --livekit-blurple: #5865f2;
-  --livekit-radius: 8px;
-  --livekit-shadow: 0 8px 16px rgba(0, 0, 0, 0.24);
+  /* Surfaces, from the lowest to the highest */
+  --lk-color-bg-primary: #313338;
+  --lk-color-bg-secondary: #2b2d31;
+  --lk-color-bg-secondary-alt: #232428;
+  --lk-color-bg-tertiary: #1e1f22;
+  --lk-color-bg-floating: #111214;
+  --lk-color-bg-hover: rgba(78, 80, 88, 0.3);
+  --lk-color-bg-active: rgba(78, 80, 88, 0.48);
+  --lk-color-bg-selected: #404249;
+  --lk-color-bg-overlay: rgba(0, 0, 0, 0.7);
+  --lk-color-border: rgba(255, 255, 255, 0.06);
+
+  /* Text and icons */
+  --lk-color-text: #dbdee1;
+  --lk-color-text-muted: #949ba4;
+  --lk-color-text-header: #f2f3f5;
+  --lk-color-text-link: #00a8fc;
+  --lk-color-text-on-color: #fff;
+  --lk-color-interactive: #b5bac1;
+
+  /* Accents */
+  --lk-color-brand: #5865f2;
+  --lk-color-brand-hover: #4752c4;
+  --lk-color-green: #23a55a;
+  --lk-color-green-strong: #248046;
+  --lk-color-green-strong-hover: #1a6334;
+  --lk-color-red: #f23f43;
+  --lk-color-red-strong: #da373c;
+  --lk-color-red-strong-hover: #a12828;
+  --lk-color-yellow: #f0b232;
+  --lk-color-neutral: #4e5058;
+  --lk-color-neutral-hover: #6d6f78;
+  --lk-color-switch-off: #80848e;
+  --lk-color-patreon: #ff424d;
+  --lk-color-patreon-hover: #e0353f;
+  --lk-color-focus: #00a8fc;
+
+  /* Radii */
+  --lk-radius-sm: 4px;
+  --lk-radius-md: 8px;
+  --lk-radius-lg: 12px;
+  --lk-radius-full: 9999px;
+
+  /* Spacing */
+  --lk-space-1: 2px;
+  --lk-space-2: 4px;
+  --lk-space-3: 6px;
+  --lk-space-4: 8px;
+  --lk-space-5: 12px;
+  --lk-space-6: 16px;
+  --lk-space-7: 20px;
+  --lk-space-8: 24px;
+  --lk-space-9: 32px;
+
+  /* Type */
+  --lk-font-size-xs: 11px;
+  --lk-font-size-sm: 12px;
+  --lk-font-size-md: 13px;
+  --lk-font-size-lg: 14px;
+  --lk-font-size-xl: 15px;
+  --lk-font-size-2xl: 20px;
+  --lk-font-weight-medium: 500;
+  --lk-font-weight-semibold: 600;
+  --lk-font-weight-bold: 700;
+  --lk-line-height: 1.3;
+  --lk-font-mono: ui-monospace, "Cascadia Mono", Consolas, monospace;
+
+  /* Sizes */
+  --lk-control-height: 36px;
+  --lk-icon-button-size: 32px;
+
+  /* Shadows */
+  --lk-shadow-low: 0 1px 3px rgba(0, 0, 0, 0.4);
+  --lk-shadow-high: 0 8px 16px rgba(0, 0, 0, 0.24);
+  --lk-shadow-focus: 0 0 0 2px var(--lk-color-focus);
+
+  /* Motion */
+  --lk-duration-fast: 100ms;
+  --lk-duration-base: 150ms;
+  --lk-ease: cubic-bezier(0.2, 0, 0, 1);
 }
 
-/* Shared controls */
-.livekit-icon-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  min-width: 32px;
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --lk-duration-fast: 0ms;
+    --lk-duration-base: 0ms;
+  }
+}
+
+/* -------------------------------------------- */
+/*  Surfaces                                    */
+/* -------------------------------------------- */
+
+/* The voice panel, popovers, menus and the settings window */
+.livekit-surface {
+  color: var(--lk-color-text);
+  color-scheme: dark;
+  font-size: var(--lk-font-size-md);
+  line-height: var(--lk-line-height);
+}
+
+:where(.livekit-surface) :focus {
+  outline: none;
+  box-shadow: none;
+}
+
+.livekit-surface :focus-visible {
+  outline: 2px solid var(--lk-color-focus);
+  outline-offset: 1px;
+  box-shadow: none;
+}
+
+/* Foundry styles every button; the kit's buttons draw their own. Without
+   specificity, so that the kit's own rules apply over it. */
+:where(.livekit-surface button, .livekit-icon-button) {
+  height: auto;
+  font-family: inherit;
+  transition: none;
+}
+
+:where(.livekit-surface) :where(h2, h3, h4) {
   margin: 0;
   padding: 0;
   border: none;
-  border-radius: 4px;
+  font-family: inherit;
+  text-shadow: none;
+}
+
+/* Foundry's tooltip, for elements inside a surface */
+#tooltip.livekit-tooltip {
+  max-width: 260px;
+  padding: var(--lk-space-4) var(--lk-space-5);
+  border-radius: var(--lk-radius-sm);
+  background: var(--lk-color-bg-floating);
+  box-shadow: var(--lk-shadow-high);
+  backdrop-filter: none;
+  color: var(--lk-color-text);
+  font-size: var(--lk-font-size-lg);
+  font-weight: var(--lk-font-weight-medium);
+  line-height: var(--lk-line-height);
+  transition-duration: var(--lk-duration-base);
+}
+
+/* Sections of a popover or window, with an uppercase heading */
+.livekit-section-heading,
+.livekit-settings-section h4,
+.livekit-settings-group h4,
+.livekit-settings-nav-header,
+.livekit-menu-header {
+  color: var(--lk-color-text-muted);
+  font-size: var(--lk-font-size-sm);
+  font-weight: var(--lk-font-weight-bold);
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+/* -------------------------------------------- */
+/*  Buttons                                     */
+/* -------------------------------------------- */
+
+.livekit-icon-button {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: var(--lk-icon-button-size);
+  height: var(--lk-icon-button-size);
+  min-width: var(--lk-icon-button-size);
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: var(--lk-radius-sm);
   background: transparent;
   box-shadow: none;
-  color: var(--livekit-text-muted);
+  color: var(--lk-color-interactive);
   font-size: 16px;
   line-height: 1;
   cursor: pointer;
+  transition:
+    background-color var(--lk-duration-fast) var(--lk-ease),
+    color var(--lk-duration-fast) var(--lk-ease);
 }
 
-.livekit-icon-button:hover,
-.livekit-icon-button:focus-visible {
-  background: var(--livekit-bg-hover);
-  color: var(--livekit-text);
+.livekit-icon-button:hover {
+  background: var(--lk-color-bg-hover);
   box-shadow: none;
+  color: var(--lk-color-text);
+}
+
+.livekit-icon-button:active {
+  background: var(--lk-color-bg-active);
 }
 
 .livekit-icon-button:disabled {
   opacity: 0.5;
+  background: transparent;
   cursor: default;
 }
 
-.livekit-icon-button.active {
-  color: var(--livekit-green);
+/* A feature that is on, e.g. noise suppression */
+.livekit-icon-button.is-active {
+  color: var(--lk-color-green);
 }
 
-.livekit-icon-button.livekit-off {
-  color: var(--livekit-red);
+/* Something normally on that is off, e.g. a muted microphone */
+.livekit-icon-button.is-off,
+.livekit-icon-button.is-off:hover {
+  color: var(--lk-color-red);
+}
+
+/* Turns red on hover, e.g. disconnect */
+.livekit-icon-button.is-danger:hover {
+  color: var(--lk-color-red);
 }
 
 /* A diagonal slash over an icon, e.g. for deafened headphones */
@@ -249,176 +299,60 @@
   height: 1.15em;
   border-radius: 1px;
   background: currentColor;
-  box-shadow: 0 0 0 1.5px var(--livekit-bg-panel);
+  box-shadow: 0 0 0 1.5px var(--lk-slash-gap, var(--lk-color-bg-secondary-alt));
   transform: translate(-50%, -50%) rotate(-45deg);
   pointer-events: none;
 }
 
-/* Voice panel */
-.livekit-voice-panel {
-  box-sizing: border-box;
-  position: fixed;
-  z-index: 100;
-  width: 280px;
-  overflow: hidden;
-  border-radius: var(--livekit-radius);
-  background: var(--livekit-bg-panel);
-  box-shadow: var(--livekit-shadow);
-  color: var(--livekit-text);
-  font-size: 13px;
-  line-height: 1.25;
-  pointer-events: auto;
-  user-select: none;
-}
-
-.livekit-panel-status {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 8px 8px 10px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-  cursor: grab;
-}
-
-.livekit-voice-panel.dragging .livekit-panel-status {
-  cursor: grabbing;
-}
-
-.livekit-panel-status-info,
-.livekit-panel-user-info {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  min-width: 0;
-}
-
-.livekit-panel-status-line {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-weight: 700;
-}
-
-.livekit-voice-panel[data-status="connected"] .livekit-panel-status-text {
-  color: var(--livekit-green);
-}
-
-.livekit-voice-panel[data-status="disconnected"] .livekit-panel-status-text {
-  color: var(--livekit-red);
-}
-
-.livekit-voice-panel[data-status="connecting"] .livekit-panel-status-text,
-.livekit-voice-panel[data-status="reconnecting"] .livekit-panel-status-text {
-  color: var(--livekit-yellow);
-}
-
-.livekit-panel-signal {
-  color: var(--livekit-text-muted);
-  font-size: 12px;
-}
-
-.livekit-panel-signal[data-quality="excellent"],
-.livekit-panel-signal[data-quality="good"] {
-  color: var(--livekit-green);
-}
-
-.livekit-panel-signal[data-quality="poor"] {
-  color: var(--livekit-yellow);
-}
-
-.livekit-panel-signal[data-quality="lost"] {
-  color: var(--livekit-red);
-}
-
-.livekit-panel-subtext {
-  overflow: hidden;
-  color: var(--livekit-text-muted);
-  font-size: 12px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.livekit-voice-panel[data-status="disconnected"] .livekit-panel-connection {
-  color: var(--livekit-green);
-}
-
-.livekit-voice-panel[data-status="connected"] .livekit-panel-connection:hover {
-  color: var(--livekit-red);
-}
-
-.livekit-panel-user {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 6px 6px 8px;
-  background: rgba(0, 0, 0, 0.12);
-}
-
-.livekit-panel-name {
-  overflow: hidden;
-  color: var(--livekit-text-header);
-  font-weight: 600;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.livekit-panel-avatar {
+.livekit-button {
+  display: inline-flex;
   flex: none;
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  transition: box-shadow 0.1s;
-}
-
-.livekit-panel-avatar img,
-.livekit-user-menu-avatar {
-  width: 100%;
-  height: 100%;
+  align-items: center;
+  justify-content: center;
+  gap: var(--lk-space-3);
+  width: auto;
+  min-height: var(--lk-icon-button-size);
+  margin: 0;
+  padding: 0 var(--lk-space-6);
   border: none;
-  border-radius: 50%;
-  object-fit: cover;
+  border-radius: var(--lk-radius-sm);
+  background: var(--lk-color-neutral);
+  box-shadow: none;
+  color: var(--lk-color-text-on-color);
+  font-size: var(--lk-font-size-md);
+  font-weight: var(--lk-font-weight-medium);
+  line-height: 1;
+  cursor: pointer;
+  transition: background-color var(--lk-duration-fast) var(--lk-ease);
 }
 
-.livekit-panel-avatar.livekit-speaking {
-  box-shadow:
-    0 0 0 2px var(--livekit-bg-panel),
-    0 0 0 4px var(--livekit-green);
+.livekit-button:hover {
+  background: var(--lk-color-neutral-hover);
+  box-shadow: none;
 }
 
-.livekit-panel-buttons {
-  display: flex;
-  flex: none;
+.livekit-button-primary {
+  background: var(--lk-color-green-strong);
 }
 
-/* Popovers */
-.livekit-popover {
-  box-sizing: border-box;
-  position: fixed;
-  z-index: 1000;
-  max-height: var(--livekit-popover-room, none);
-  overflow-y: auto;
-  padding: 8px;
-  border-radius: var(--livekit-radius);
-  background: var(--livekit-bg-floating);
-  box-shadow: var(--livekit-shadow);
-  color: var(--livekit-text);
-  font-size: 13px;
-  line-height: 1.3;
+.livekit-button-primary:hover {
+  background: var(--lk-color-green-strong-hover);
 }
 
-.livekit-popover-title {
-  margin: 4px 4px 8px;
-  padding: 0;
-  border: none;
-  color: var(--livekit-text-header);
-  font-size: 15px;
-  font-weight: 700;
+.livekit-button-danger {
+  background: var(--lk-color-red-strong);
 }
 
-.livekit-popover-footer {
-  display: flex;
-  justify-content: flex-end;
-  padding: 6px 4px 2px;
+.livekit-button-danger:hover {
+  background: var(--lk-color-red-strong-hover);
+}
+
+.livekit-button-patreon {
+  background: var(--lk-color-patreon);
+}
+
+.livekit-button-patreon:hover {
+  background: var(--lk-color-patreon-hover);
 }
 
 .livekit-link-button {
@@ -428,8 +362,8 @@
   border: none;
   background: none;
   box-shadow: none;
-  color: #00a8fc;
-  font-size: 13px;
+  color: var(--lk-color-text-link);
+  font-size: var(--lk-font-size-md);
   line-height: 1.4;
   cursor: pointer;
 }
@@ -440,176 +374,179 @@
   text-decoration: underline;
 }
 
-/* Voice settings */
-.livekit-audio-settings {
-  width: 320px;
-  max-height: min(70vh, 640px, var(--livekit-popover-room, 100vh));
-}
-
-.livekit-settings-section {
-  padding: 8px 4px;
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
-}
-
-.livekit-settings-section h4 {
-  margin: 0 0 8px;
-  padding: 0;
-  border: none;
-  color: var(--livekit-text-muted);
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
-}
+/* -------------------------------------------- */
+/*  Form controls                               */
+/* -------------------------------------------- */
 
 /* Setting rows: a label and hint, with the control below or (inline) on the
-   right. Shared by the voice settings popover and the A/V settings window. */
+   right */
 .livekit-setting {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  margin-bottom: 12px;
+  gap: var(--lk-space-3);
+  margin-bottom: var(--lk-space-5);
 }
 
 .livekit-setting.inline {
   flex-direction: row;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
+  gap: var(--lk-space-6);
 }
 
 .livekit-setting-text {
   display: flex;
   flex: 1;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--lk-space-1);
   min-width: 0;
 }
 
 .livekit-setting-label {
-  color: var(--livekit-text);
-  font-size: 13px;
-  font-weight: 500;
+  color: var(--lk-color-text);
+  font-size: var(--lk-font-size-md);
+  font-weight: var(--lk-font-weight-medium);
 }
 
 .livekit-setting-hint {
   margin: 0;
-  color: var(--livekit-text-muted);
-  font-size: 12px;
+  color: var(--lk-color-text-muted);
+  font-size: var(--lk-font-size-sm);
   line-height: 1.35;
 }
 
 .livekit-setting-hint a {
-  color: #00a8fc;
+  color: var(--lk-color-text-link);
 }
 
+.livekit-select,
 .livekit-text,
 .livekit-number {
   box-sizing: border-box;
   width: 100%;
-  height: 36px;
-  padding: 0 10px;
+  height: var(--lk-control-height);
+  margin: 0;
+  padding: 0 var(--lk-space-5);
   border: none;
-  border-radius: 4px;
-  background: var(--livekit-bg-input);
+  border-radius: var(--lk-radius-sm);
+  background: var(--lk-color-bg-tertiary);
   box-shadow: none;
-  color: var(--livekit-text);
-  font-size: 13px;
+  color: var(--lk-color-text);
+  font-size: var(--lk-font-size-md);
+}
+
+.livekit-select {
+  padding: 0 var(--lk-space-4);
+  cursor: pointer;
+}
+
+.livekit-select:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.livekit-select option {
+  background: var(--lk-color-bg-tertiary);
+  color: var(--lk-color-text);
 }
 
 .livekit-number {
   width: 96px;
 }
 
-.livekit-text:focus,
-.livekit-number:focus,
-.livekit-select:focus {
-  outline: 2px solid #00a8fc;
+.livekit-surface :is(.livekit-select, .livekit-text, .livekit-number):focus {
+  outline: 2px solid var(--lk-color-focus);
+  outline-offset: 0;
   box-shadow: none;
 }
 
-.livekit-radio-group {
-  display: flex;
-  flex-direction: column;
-}
-
-.livekit-button {
-  display: inline-flex;
-  flex: none;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  width: auto;
-  min-height: 32px;
-  margin: 0;
-  padding: 0 16px;
-  border: none;
-  border-radius: 4px;
-  background: #4e5058;
-  box-shadow: none;
-  color: #fff;
-  font-size: 13px;
-  font-weight: 500;
-  line-height: 1;
-  cursor: pointer;
-}
-
-.livekit-button:hover {
-  background: #6d6f78;
-  box-shadow: none;
-}
-
-.livekit-button-primary {
-  background: #248046;
-}
-
-.livekit-button-primary:hover {
-  background: #1a6334;
-}
-
-.livekit-button-danger {
-  background: #da373c;
-}
-
-.livekit-button-danger:hover {
-  background: #a12828;
-}
-
-.livekit-button-patreon {
-  background: #ff424d;
-}
-
-.livekit-button-patreon:hover {
-  background: #e0353f;
-}
-
-.livekit-select {
-  width: 100%;
-  height: 36px;
-  padding: 0 8px;
-  border: none;
-  border-radius: 4px;
-  background: var(--livekit-bg-input);
-  color: var(--livekit-text);
-  font-size: 13px;
-}
-
-.livekit-select option {
-  background: var(--livekit-bg-input);
-  color: var(--livekit-text);
-}
-
-.livekit-radio,
+/* Switch */
 .livekit-switch {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin: 0 0 6px;
-  padding: 8px;
-  border-radius: 4px;
-  background: var(--livekit-bg-input);
-  color: var(--livekit-text);
+  justify-content: space-between;
+  gap: var(--lk-space-6);
+  margin: 0 0 var(--lk-space-5);
+  padding: 0;
+  color: var(--lk-color-text);
   cursor: pointer;
+}
+
+.livekit-switch input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+  opacity: 0;
+}
+
+.livekit-switch-track {
+  position: relative;
+  flex: none;
+  width: 40px;
+  height: 24px;
+  border-radius: var(--lk-radius-full);
+  background: var(--lk-color-switch-off);
+  transition: background-color var(--lk-duration-base) var(--lk-ease);
+}
+
+.livekit-switch-track::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--lk-color-text-on-color);
+  transition: transform var(--lk-duration-base) var(--lk-ease);
+}
+
+.livekit-switch input:checked + .livekit-switch-track {
+  background: var(--lk-color-green);
+}
+
+.livekit-switch input:checked + .livekit-switch-track::after {
+  transform: translateX(16px);
+}
+
+.livekit-switch input:focus-visible + .livekit-switch-track {
+  outline: 2px solid var(--lk-color-focus);
+  outline-offset: 2px;
+}
+
+.livekit-switch.disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* Radio rows */
+.livekit-radio-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lk-space-3);
+}
+
+.livekit-radio {
+  display: flex;
+  align-items: center;
+  gap: var(--lk-space-4);
+  margin: 0;
+  padding: var(--lk-space-4) var(--lk-space-5);
+  border-radius: var(--lk-radius-sm);
+  background: var(--lk-color-bg-secondary);
+  color: var(--lk-color-text);
+  cursor: pointer;
+  transition: background-color var(--lk-duration-fast) var(--lk-ease);
+}
+
+.livekit-radio:hover {
+  background: var(--lk-color-bg-selected);
+}
+
+.livekit-radio:has(input:checked) {
+  background: var(--lk-color-bg-selected);
+  color: var(--lk-color-text-header);
 }
 
 /* Our own radio style, so Foundry's form styles don't apply */
@@ -618,7 +555,7 @@
   width: 18px;
   height: 18px;
   margin: 0;
-  border: 2px solid #b5bac1;
+  border: 2px solid var(--lk-color-interactive);
   border-radius: 50%;
   background: transparent;
   box-shadow: none;
@@ -632,98 +569,151 @@
 }
 
 .livekit-radio input[type="radio"]:checked {
-  border-color: var(--livekit-blurple);
+  border-color: var(--lk-color-brand);
   background: radial-gradient(
     circle,
-    var(--livekit-blurple) 0 4px,
+    var(--lk-color-brand) 0 4px,
     transparent 4.5px
   );
 }
 
 .livekit-radio input[type="radio"]:focus-visible {
-  outline: 2px solid #00a8fc;
   outline-offset: 2px;
 }
 
-.livekit-switch {
-  justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 12px;
-  background: none;
-  padding: 0;
+/* Segmented control: joined buttons, one selected */
+.livekit-segmented {
+  display: flex;
+  gap: var(--lk-space-1);
+  padding: var(--lk-space-1);
+  border-radius: var(--lk-radius-sm);
+  background: var(--lk-color-bg-tertiary);
 }
 
-.livekit-switch input {
+.livekit-segment {
+  position: relative;
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  min-height: 28px;
+  padding: 0 var(--lk-space-4);
+  border-radius: 3px;
+  color: var(--lk-color-text-muted);
+  font-weight: var(--lk-font-weight-medium);
+  text-align: center;
+  cursor: pointer;
+  transition:
+    background-color var(--lk-duration-fast) var(--lk-ease),
+    color var(--lk-duration-fast) var(--lk-ease);
+}
+
+.livekit-segment input {
   position: absolute;
   width: 1px;
   height: 1px;
+  margin: 0;
   opacity: 0;
 }
 
-.livekit-switch-track {
-  position: relative;
-  flex: none;
-  width: 40px;
-  height: 24px;
-  border-radius: 12px;
-  background: #80848e;
-  transition: background 0.15s;
+.livekit-segment:hover {
+  background: var(--lk-color-bg-hover);
+  color: var(--lk-color-text);
 }
 
-.livekit-switch-track::after {
-  content: "";
-  position: absolute;
-  top: 3px;
-  left: 3px;
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  background: #fff;
-  transition: transform 0.15s;
+.livekit-segment:has(input:checked) {
+  background: var(--lk-color-bg-selected);
+  color: var(--lk-color-text-header);
 }
 
-.livekit-switch input:checked + .livekit-switch-track {
-  background: var(--livekit-green);
+.livekit-segment:has(input:focus-visible) {
+  outline: 2px solid var(--lk-color-focus);
 }
 
-.livekit-switch input:checked + .livekit-switch-track::after {
-  transform: translateX(16px);
+/* Slider with its label and value */
+.livekit-slider-field {
+  display: block;
 }
 
-.livekit-switch input:focus-visible + .livekit-switch-track {
-  outline: 2px solid #00a8fc;
+.livekit-slider-header {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--lk-space-4);
+  margin-bottom: var(--lk-space-3);
 }
 
-.livekit-switch.disabled {
-  opacity: 0.5;
-  cursor: default;
+.livekit-slider-value {
+  color: var(--lk-color-text-muted);
+  font-variant-numeric: tabular-nums;
 }
 
+.livekit-slider {
+  width: 100%;
+  height: 8px;
+  margin: var(--lk-space-2) 0;
+  border: none;
+  border-radius: var(--lk-radius-full);
+  background: linear-gradient(
+    to right,
+    var(--lk-color-brand) var(--fill, 50%),
+    var(--lk-color-neutral) var(--fill, 50%)
+  );
+  appearance: none;
+  cursor: pointer;
+}
+
+.livekit-slider::-webkit-slider-thumb {
+  width: 10px;
+  height: 20px;
+  border-radius: 3px;
+  background: var(--lk-color-text-on-color);
+  box-shadow: var(--lk-shadow-low);
+  appearance: none;
+}
+
+.livekit-slider::-moz-range-thumb {
+  width: 10px;
+  height: 20px;
+  border: none;
+  border-radius: 3px;
+  background: var(--lk-color-text-on-color);
+}
+
+.livekit-slider-hint {
+  margin: var(--lk-space-2) 0 var(--lk-space-5);
+}
+
+/* Push to talk shortcut */
 .livekit-keybind {
   width: auto;
   min-width: 96px;
   margin: 0;
-  padding: 6px 10px;
-  border: 1px solid var(--livekit-bg-input);
-  border-radius: 4px;
-  background: var(--livekit-bg-input);
+  padding: var(--lk-space-3) var(--lk-space-5);
+  border: 1px solid var(--lk-color-bg-tertiary);
+  border-radius: var(--lk-radius-sm);
+  background: var(--lk-color-bg-tertiary);
   box-shadow: none;
-  color: var(--livekit-text);
-  font-family: monospace;
-  font-size: 12px;
+  color: var(--lk-color-text);
+  font-family: var(--lk-font-mono);
+  font-size: var(--lk-font-size-sm);
   cursor: pointer;
 }
 
+.livekit-keybind:hover {
+  border-color: var(--lk-color-neutral);
+  box-shadow: none;
+}
+
 .livekit-keybind.recording {
-  border-color: var(--livekit-red);
-  color: var(--livekit-red);
+  border-color: var(--lk-color-red);
+  color: var(--lk-color-red);
 }
 
 /* Input sensitivity meter with a threshold marker */
 .livekit-meter {
   position: relative;
   height: 24px;
-  margin: 4px 0;
+  margin: var(--lk-space-2) 0;
 }
 
 .livekit-meter-track {
@@ -733,18 +723,21 @@
   left: 0;
   height: 8px;
   overflow: hidden;
-  border-radius: 4px;
-  background: #4e5058;
+  border-radius: var(--lk-radius-sm);
+  background: var(--lk-color-neutral);
 }
 
 .livekit-meter-fill {
   width: 0;
   height: 100%;
-  background: var(--livekit-yellow);
+  background: var(--lk-color-yellow);
+  transition:
+    width 50ms linear,
+    background-color var(--lk-duration-fast) var(--lk-ease);
 }
 
 .livekit-meter-fill.open {
-  background: var(--livekit-green);
+  background: var(--lk-color-green);
 }
 
 .livekit-meter-threshold {
@@ -753,6 +746,7 @@
   width: 100%;
   height: 24px;
   margin: 0;
+  border: none;
   background: transparent;
   appearance: none;
   cursor: ew-resize;
@@ -773,7 +767,7 @@
   height: 24px;
   border: 1px solid rgba(0, 0, 0, 0.4);
   border-radius: 3px;
-  background: #fff;
+  background: var(--lk-color-text-on-color);
   appearance: none;
 }
 
@@ -782,219 +776,590 @@
   height: 24px;
   border: 1px solid rgba(0, 0, 0, 0.4);
   border-radius: 3px;
-  background: #fff;
+  background: var(--lk-color-text-on-color);
 }
 
-.livekit-meter.disabled {
-  opacity: 0.4;
-}
-
-.livekit-meter.disabled .livekit-meter-threshold {
-  cursor: default;
+/* Automatic sensitivity: the level only, without the threshold marker */
+.livekit-meter.is-auto .livekit-meter-threshold {
+  visibility: hidden;
 }
 
 .livekit-meter-caption {
-  margin-left: 4px;
-  color: var(--livekit-text);
+  margin-left: var(--lk-space-2);
+  color: var(--lk-color-text);
 }
 
-/* User context menu */
-.livekit-user-menu {
-  width: 220px;
-}
+/* -------------------------------------------- */
+/*  Avatars and badges                          */
+/* -------------------------------------------- */
 
-.livekit-user-menu-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 4px;
-}
-
-.livekit-user-menu-avatar {
-  flex: none;
-  width: 24px;
-  height: 24px;
-}
-
-.livekit-user-menu-name {
-  overflow: hidden;
-  color: var(--livekit-text-header);
-  font-weight: 600;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.livekit-menu-separator {
-  height: 1px;
-  margin: 4px;
-  background: rgba(255, 255, 255, 0.06);
-}
-
-.livekit-user-menu-volume {
-  display: block;
-  padding: 6px 8px;
-}
-
-.livekit-user-menu-label {
-  display: flex;
-  justify-content: space-between;
-  margin-bottom: 6px;
-  color: var(--livekit-text);
-}
-
-.livekit-user-menu-value {
-  color: var(--livekit-text-muted);
-}
-
-.livekit-slider {
-  width: 100%;
-  height: 8px;
-  margin: 4px 0;
-  border-radius: 4px;
-  background: linear-gradient(
-    to right,
-    var(--livekit-blurple) var(--fill, 50%),
-    #4e5058 var(--fill, 50%)
-  );
-  appearance: none;
-  cursor: pointer;
-}
-
-.livekit-slider::-webkit-slider-thumb {
-  width: 10px;
-  height: 20px;
-  border-radius: 3px;
-  background: #fff;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
-  appearance: none;
-}
-
-.livekit-slider::-moz-range-thumb {
-  width: 10px;
-  height: 20px;
-  border: none;
-  border-radius: 3px;
-  background: #fff;
-}
-
-.livekit-menu-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  width: 100%;
-  margin: 0;
-  padding: 6px 8px;
-  border: none;
-  border-radius: 2px;
-  background: none;
-  box-shadow: none;
-  color: var(--livekit-text);
-  font-size: 13px;
-  line-height: 1.4;
-  text-align: left;
-  cursor: pointer;
-}
-
-.livekit-menu-item:hover,
-.livekit-menu-item:focus-visible {
-  background: var(--livekit-blurple);
-  box-shadow: none;
-  color: #fff;
-}
-
-.livekit-menu-check.active i {
-  color: var(--livekit-blurple);
-}
-
-.livekit-menu-check.active:hover i {
-  color: #fff;
-}
-
-/* Camera view decorations (only with the Discord-style interface) */
-.livekit-avatar,
-.livekit-badges {
-  display: none;
-}
-
-.livekit-discord-ui .livekit-badges {
-  z-index: 1;
-}
-
-.livekit-positioned {
+.livekit-avatar {
+  --lk-avatar-size: 32px;
+  /* The gap between the avatar and its speaking ring, in the color of the
+     surface behind it */
+  --lk-ring-gap: var(--lk-color-bg-secondary-alt);
   position: relative;
+  display: inline-block;
+  flex: none;
+  width: var(--lk-avatar-size);
+  height: var(--lk-avatar-size);
+  border-radius: 50%;
+  transition: box-shadow var(--lk-duration-fast) var(--lk-ease);
 }
 
-.livekit-discord-ui .camera-view video.user-video {
-  border-radius: var(--livekit-radius);
+.livekit-avatar-sm {
+  --lk-avatar-size: 24px;
 }
 
-/* A separate element, since the video is drawn above outlines */
-.livekit-ring {
-  display: none;
+.livekit-avatar-lg {
+  --lk-avatar-size: 80px;
 }
 
-.livekit-discord-ui .camera-view.livekit-speaking .livekit-ring {
+.livekit-avatar-image {
   display: block;
-  position: absolute;
-  z-index: 1;
-  inset: 0;
-  border: 2px solid var(--livekit-green);
-  border-radius: var(--livekit-radius);
-  pointer-events: none;
-}
-
-/* Our badge replaces Foundry's remote muted indicator */
-.livekit-discord-ui .camera-view .status-remote-muted {
-  display: none !important;
-}
-
-.livekit-discord-ui .camera-view.livekit-no-video .livekit-avatar {
-  display: flex;
-  position: absolute;
-  inset: 0;
-  align-items: center;
-  justify-content: center;
-  border-radius: var(--livekit-radius);
-  background: var(--livekit-bg-panel);
-  pointer-events: none;
-}
-
-.livekit-avatar img {
-  width: min(45%, 96px);
-  aspect-ratio: 1;
-  height: auto;
+  width: 100%;
+  height: 100%;
   border: none;
   border-radius: 50%;
   object-fit: cover;
-  transition: box-shadow 0.1s;
 }
 
-.livekit-discord-ui .camera-view.livekit-speaking .livekit-avatar img {
+.livekit-avatar.is-speaking {
   box-shadow:
-    0 0 0 3px var(--livekit-bg-panel),
-    0 0 0 6px var(--livekit-green);
+    0 0 0 2px var(--lk-ring-gap),
+    0 0 0 4px var(--lk-color-green);
 }
 
-.livekit-discord-ui .livekit-badges {
-  display: flex;
+.livekit-avatar-lg.is-speaking,
+.livekit-avatar-fill.is-speaking {
+  box-shadow:
+    0 0 0 3px var(--lk-ring-gap),
+    0 0 0 6px var(--lk-color-green);
+}
+
+.livekit-avatar-badges {
   position: absolute;
-  right: 6px;
-  bottom: 6px;
-  gap: 4px;
-  pointer-events: none;
+  right: -4px;
+  bottom: -4px;
+  display: flex;
+  gap: var(--lk-space-1);
+}
+
+.livekit-avatar-badges:empty {
+  display: none;
+}
+
+.livekit-avatar-badges .livekit-badge {
+  width: 16px;
+  height: 16px;
+  background: var(--lk-ring-gap);
+  font-size: 9px;
 }
 
 .livekit-badge {
+  --lk-slash-gap: var(--lk-color-bg-overlay);
   display: inline-flex;
   align-items: center;
   justify-content: center;
   width: 22px;
   height: 22px;
   border-radius: 50%;
-  background: rgba(0, 0, 0, 0.7);
-  color: var(--livekit-red);
+  background: var(--lk-color-bg-overlay);
+  color: var(--lk-color-red);
+  font-size: var(--lk-font-size-xs);
+}
+
+/* -------------------------------------------- */
+/*  Popovers and menus                          */
+/* -------------------------------------------- */
+
+.livekit-popover {
+  box-sizing: border-box;
+  position: fixed;
+  z-index: 1000;
+  max-height: var(--livekit-popover-room, none);
+  overflow-y: auto;
+  padding: var(--lk-space-4);
+  border-radius: var(--lk-radius-md);
+  background: var(--lk-color-bg-floating);
+  box-shadow: var(--lk-shadow-high);
+  animation: livekit-pop-in var(--lk-duration-base) var(--lk-ease);
+}
+
+@keyframes livekit-pop-in {
+  from {
+    transform: scale(0.97);
+    opacity: 0;
+  }
+}
+
+.livekit-popover-title {
+  margin: var(--lk-space-2) var(--lk-space-2) var(--lk-space-4);
+  color: var(--lk-color-text-header);
+  font-size: var(--lk-font-size-xl);
+  font-weight: var(--lk-font-weight-bold);
+}
+
+.livekit-popover-footer {
+  display: flex;
+  justify-content: flex-end;
+  padding: var(--lk-space-3) var(--lk-space-2) var(--lk-space-1);
+}
+
+.livekit-menu {
+  min-width: 200px;
+  padding: var(--lk-space-3) var(--lk-space-4);
+}
+
+.livekit-menu-header {
+  padding: var(--lk-space-3) var(--lk-space-4) var(--lk-space-2);
+  font-size: var(--lk-font-size-xs);
+}
+
+.livekit-menu-separator {
+  height: 1px;
+  margin: var(--lk-space-2) var(--lk-space-2);
+  background: var(--lk-color-border);
+}
+
+.livekit-menu-custom {
+  padding: var(--lk-space-3) var(--lk-space-4);
+}
+
+.livekit-menu-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--lk-space-4);
+  width: 100%;
+  min-height: 32px;
+  margin: var(--lk-space-1) 0;
+  padding: var(--lk-space-3) var(--lk-space-4);
+  border: none;
+  border-radius: var(--lk-radius-sm);
+  background: none;
+  box-shadow: none;
+  color: var(--lk-color-text);
+  font-size: var(--lk-font-size-lg);
+  font-weight: var(--lk-font-weight-medium);
+  line-height: 1.3;
+  text-align: left;
+  cursor: pointer;
+}
+
+.livekit-menu-item:hover,
+.livekit-menu-item:focus-visible {
+  outline: none;
+  background: var(--lk-color-brand);
+  box-shadow: none;
+  color: var(--lk-color-text-on-color);
+}
+
+.livekit-menu-item.is-danger {
+  color: var(--lk-color-red);
+}
+
+.livekit-menu-item.is-danger:is(:hover, :focus-visible) {
+  background: var(--lk-color-red-strong);
+  color: var(--lk-color-text-on-color);
+}
+
+.livekit-menu-item:disabled {
+  opacity: 0.5;
+  background: none;
+  color: var(--lk-color-text);
+  cursor: default;
+}
+
+.livekit-menu-item-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.livekit-menu-item-detail {
+  color: var(--lk-color-text-muted);
+  font-size: var(--lk-font-size-sm);
+  font-weight: normal;
+}
+
+.livekit-menu-item:is(:hover, :focus-visible):not(:disabled)
+  .livekit-menu-item-detail {
+  color: inherit;
+  opacity: 0.85;
+}
+
+.livekit-menu-item-icon {
+  flex: none;
+  font-size: var(--lk-font-size-lg);
+}
+
+/* Check boxes and radio circles on the right of menu items */
+.livekit-menu-checkbox,
+.livekit-menu-radio {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  box-sizing: border-box;
+  border: 2px solid var(--lk-color-interactive);
+  color: transparent;
+  font-size: 10px;
+}
+
+.livekit-menu-checkbox {
+  border-radius: var(--lk-radius-sm);
+}
+
+.livekit-menu-radio {
+  border-radius: 50%;
+}
+
+.livekit-menu-item.is-checked .livekit-menu-checkbox {
+  border-color: var(--lk-color-brand);
+  background: var(--lk-color-brand);
+  color: var(--lk-color-text-on-color);
+}
+
+.livekit-menu-item.is-checked .livekit-menu-radio {
+  border-color: var(--lk-color-brand);
+  background: radial-gradient(
+    circle,
+    var(--lk-color-brand) 0 4px,
+    transparent 4.5px
+  );
+}
+
+/* On a highlighted item, the indicators are white */
+.livekit-menu-item:is(:hover, :focus-visible):not(:disabled)
+  :is(.livekit-menu-checkbox, .livekit-menu-radio) {
+  border-color: var(--lk-color-text-on-color);
+}
+
+.livekit-menu-item.is-checked:is(:hover, :focus-visible):not(:disabled)
+  .livekit-menu-checkbox {
+  background: var(--lk-color-text-on-color);
+  color: var(--lk-color-brand);
+}
+
+.livekit-menu-item.is-checked:is(:hover, :focus-visible):not(:disabled)
+  .livekit-menu-radio {
+  background: radial-gradient(
+    circle,
+    var(--lk-color-text-on-color) 0 4px,
+    transparent 4.5px
+  );
+}
+
+/* -------------------------------------------- */
+/*  Voice panel                                 */
+/* -------------------------------------------- */
+
+.livekit-voice-panel {
+  box-sizing: border-box;
+  position: fixed;
+  z-index: 100;
+  width: 300px;
+  overflow: hidden;
+  border-radius: var(--lk-radius-md);
+  background: var(--lk-color-bg-secondary-alt);
+  box-shadow: var(--lk-shadow-high);
+  line-height: 1.25;
+  pointer-events: auto;
+  user-select: none;
+}
+
+.livekit-panel-status {
+  display: flex;
+  align-items: center;
+  gap: var(--lk-space-4);
+  padding: var(--lk-space-4) var(--lk-space-4) var(--lk-space-4) 10px;
+  border-bottom: 1px solid var(--lk-color-border);
+  cursor: grab;
+}
+
+.livekit-voice-panel.dragging .livekit-panel-status {
+  cursor: grabbing;
+}
+
+.livekit-panel-status-info,
+.livekit-panel-user-info {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+/* The status is a button that opens the connection details */
+.livekit-panel-status-info {
+  align-items: stretch;
+  width: auto;
+  height: auto;
+  margin: 0;
+  padding: var(--lk-space-1) var(--lk-space-2);
+  border: none;
+  border-radius: var(--lk-radius-sm);
+  background: none;
+  box-shadow: none;
+  color: inherit;
+  font-size: inherit;
+  line-height: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.livekit-panel-status-info:hover {
+  background: var(--lk-color-bg-hover);
+  box-shadow: none;
+}
+
+.livekit-panel-status-info:hover .livekit-panel-status-text {
+  text-decoration: underline;
+}
+
+.livekit-panel-status-line {
+  display: flex;
+  align-items: center;
+  gap: var(--lk-space-3);
+  font-weight: var(--lk-font-weight-bold);
+}
+
+.livekit-voice-panel[data-status="connected"] .livekit-panel-status-text {
+  color: var(--lk-color-green);
+}
+
+.livekit-voice-panel[data-status="disconnected"] .livekit-panel-status-text {
+  color: var(--lk-color-red);
+}
+
+.livekit-voice-panel[data-status="connecting"] .livekit-panel-status-text,
+.livekit-voice-panel[data-status="reconnecting"] .livekit-panel-status-text {
+  color: var(--lk-color-yellow);
+}
+
+.livekit-panel-signal {
+  color: var(--lk-color-text-muted);
+  font-size: var(--lk-font-size-sm);
+}
+
+.livekit-panel-signal[data-quality="excellent"],
+.livekit-panel-signal[data-quality="good"] {
+  color: var(--lk-color-green);
+}
+
+.livekit-panel-signal[data-quality="poor"] {
+  color: var(--lk-color-yellow);
+}
+
+.livekit-panel-signal[data-quality="lost"] {
+  color: var(--lk-color-red);
+}
+
+.livekit-panel-subtext {
+  overflow: hidden;
+  color: var(--lk-color-text-muted);
+  font-size: var(--lk-font-size-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.livekit-panel-user {
+  --lk-slash-gap: var(--lk-color-bg-secondary-alt);
+  display: flex;
+  align-items: center;
+  gap: var(--lk-space-4);
+  padding: var(--lk-space-3) var(--lk-space-3) var(--lk-space-3)
+    var(--lk-space-4);
+}
+
+.livekit-panel-name {
+  overflow: hidden;
+  color: var(--lk-color-text-header);
+  font-weight: var(--lk-font-weight-semibold);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.livekit-panel-buttons {
+  display: flex;
+  flex: none;
+}
+
+/* -------------------------------------------- */
+/*  Voice settings popover                      */
+/* -------------------------------------------- */
+
+.livekit-audio-settings {
+  width: 320px;
+  max-height: min(70vh, 640px, var(--livekit-popover-room, 100vh));
+}
+
+.livekit-settings-section {
+  padding: var(--lk-space-4) var(--lk-space-2);
+  border-top: 1px solid var(--lk-color-border);
+}
+
+.livekit-settings-section h4 {
+  margin: 0 0 var(--lk-space-4);
+}
+
+.livekit-settings-section > .livekit-segmented {
+  margin-bottom: var(--lk-space-4);
+}
+
+/* -------------------------------------------- */
+/*  Connection details                          */
+/* -------------------------------------------- */
+
+.livekit-connection-details {
+  width: 300px;
+}
+
+.livekit-details {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--lk-space-3) var(--lk-space-6);
+  margin: 0;
+  padding: var(--lk-space-4) var(--lk-space-2);
+  border-top: 1px solid var(--lk-color-border);
+}
+
+.livekit-details dt {
+  color: var(--lk-color-text-muted);
+  font-size: var(--lk-font-size-sm);
+  font-weight: var(--lk-font-weight-bold);
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.livekit-details dd {
+  margin: 0;
+  color: var(--lk-color-text);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+  text-align: right;
+}
+
+/* -------------------------------------------- */
+/*  Player list                                 */
+/* -------------------------------------------- */
+
+.livekit-discord-ui #players .player.livekit-speaking::before {
+  box-shadow:
+    0 0 0 2px var(--lk-color-bg-tertiary),
+    0 0 0 3px var(--lk-color-green);
+}
+
+.livekit-player-status {
+  display: flex;
+  gap: var(--lk-space-1);
+  margin-left: auto;
+}
+
+.livekit-player-status:empty {
+  display: none;
+}
+
+.livekit-player-status .livekit-badge {
+  --lk-slash-gap: transparent;
+  width: 16px;
+  height: 16px;
+  background: none;
   font-size: 11px;
-  --livekit-bg-panel: rgba(0, 0, 0, 0.7);
+}
+
+/* -------------------------------------------- */
+/*  User context menu                           */
+/* -------------------------------------------- */
+
+.livekit-user-menu {
+  width: 240px;
+}
+
+.livekit-user-menu .livekit-menu-custom:first-child {
+  padding: var(--lk-space-2);
+}
+
+.livekit-user-menu-header {
+  --lk-ring-gap: var(--lk-color-bg-floating);
+  display: flex;
+  align-items: center;
+  gap: var(--lk-space-4);
+}
+
+.livekit-user-menu-name {
+  overflow: hidden;
+  color: var(--lk-color-text-header);
+  font-weight: var(--lk-font-weight-semibold);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* -------------------------------------------- */
+/*  Camera view decorations                     */
+/* -------------------------------------------- */
+
+/* Only shown with the Discord-style interface */
+.livekit-camera-avatar,
+.livekit-camera-badges,
+.livekit-ring {
+  display: none;
+}
+
+.livekit-positioned {
+  position: relative;
+}
+
+.livekit-discord-ui .camera-view {
+  border-radius: var(--lk-radius-md);
+}
+
+/* Our ring and badges replace Foundry's */
+.livekit-discord-ui .camera-view.speaking::after {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.livekit-discord-ui .camera-view .notification-bar {
+  display: none;
+}
+
+/* A separate element, since the video is drawn above outlines */
+.livekit-discord-ui .camera-view.livekit-speaking .livekit-ring {
+  display: block;
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  border: 2px solid var(--lk-color-green);
+  border-radius: var(--lk-radius-md);
+  pointer-events: none;
+}
+
+.livekit-discord-ui .camera-view.livekit-no-video .livekit-camera-avatar {
+  display: flex;
+  position: absolute;
+  inset: 0;
+  align-items: center;
+  justify-content: center;
+  background: var(--lk-color-bg-secondary-alt);
+  pointer-events: none;
+}
+
+.livekit-camera-avatar .livekit-avatar {
+  --lk-avatar-size: min(45%, 96px);
+  height: auto;
+  aspect-ratio: 1;
+}
+
+.livekit-discord-ui .livekit-camera-badges {
+  display: flex;
+  position: absolute;
+  z-index: 1;
+  top: var(--lk-space-3);
+  right: var(--lk-space-3);
+  gap: var(--lk-space-2);
+  pointer-events: none;
 }
 
 /* -------------------------------------------- */
@@ -1004,15 +1369,14 @@
 .livekit-settings-app .window-content {
   padding: 0;
   overflow: hidden;
-  background: #313338;
-  color: var(--livekit-text);
+  background: var(--lk-color-bg-primary);
+  color: var(--lk-color-text);
 }
 
 .livekit-settings-window {
   display: flex;
   height: 100%;
   min-height: 0;
-  font-size: 13px;
 }
 
 .livekit-settings-window [hidden] {
@@ -1022,20 +1386,13 @@
 .livekit-settings-nav {
   flex: none;
   width: 200px;
-  padding: 20px 8px;
+  padding: var(--lk-space-7) var(--lk-space-4);
   overflow-y: auto;
-  background: #2b2d31;
+  background: var(--lk-color-bg-secondary);
 }
 
 .livekit-settings-nav-header {
-  margin: 12px 10px 6px;
-  padding: 0;
-  border: none;
-  color: var(--livekit-text-muted);
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
+  margin: var(--lk-space-5) 10px var(--lk-space-3);
 }
 
 .livekit-settings-nav-header:first-child {
@@ -1045,31 +1402,32 @@
 .livekit-settings-nav-item {
   display: flex;
   align-items: center;
-  gap: 8px;
+  justify-content: flex-start;
+  gap: var(--lk-space-4);
   width: 100%;
-  margin: 0 0 2px;
-  padding: 6px 10px;
+  margin: 0 0 var(--lk-space-1);
+  padding: var(--lk-space-3) 10px;
   border: none;
-  border-radius: 4px;
+  border-radius: var(--lk-radius-sm);
   background: none;
   box-shadow: none;
-  color: var(--livekit-text-muted);
-  font-size: 14px;
-  font-weight: 500;
+  color: var(--lk-color-text-muted);
+  font-size: var(--lk-font-size-lg);
+  font-weight: var(--lk-font-weight-medium);
   line-height: 1.4;
   text-align: left;
   cursor: pointer;
 }
 
 .livekit-settings-nav-item:hover {
-  background: var(--livekit-bg-hover);
+  background: var(--lk-color-bg-hover);
   box-shadow: none;
-  color: var(--livekit-text);
+  color: var(--lk-color-text);
 }
 
-.livekit-settings-nav-item.active {
-  background: #404249;
-  color: #fff;
+.livekit-settings-nav-item.is-selected {
+  background: var(--lk-color-bg-selected);
+  color: var(--lk-color-text-on-color);
 }
 
 .livekit-settings-main {
@@ -1082,7 +1440,7 @@
 
 .livekit-settings-content {
   flex: 1;
-  padding: 24px 32px 88px;
+  padding: var(--lk-space-8) var(--lk-space-9) 88px;
   overflow-y: auto;
 }
 
@@ -1091,18 +1449,16 @@
 }
 
 .livekit-settings-pane h2 {
-  margin: 0 0 20px;
-  padding: 0;
-  border: none;
-  color: var(--livekit-text-header);
-  font-size: 20px;
-  font-weight: 700;
+  margin: 0 0 var(--lk-space-7);
+  color: var(--lk-color-text-header);
+  font-size: var(--lk-font-size-2xl);
+  font-weight: var(--lk-font-weight-bold);
 }
 
 .livekit-settings-group {
-  margin-bottom: 24px;
-  padding-bottom: 12px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  margin-bottom: var(--lk-space-8);
+  padding-bottom: var(--lk-space-5);
+  border-bottom: 1px solid var(--lk-color-border);
 }
 
 .livekit-settings-group:last-child {
@@ -1110,21 +1466,18 @@
 }
 
 .livekit-settings-group h4 {
-  margin: 0 0 12px;
-  padding: 0;
-  border: none;
-  color: var(--livekit-text-muted);
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
+  margin: 0 0 var(--lk-space-5);
 }
 
 .livekit-settings-subgroup {
-  margin: 4px 0 12px;
-  padding: 12px 12px 0;
-  border-radius: var(--livekit-radius);
-  background: #2b2d31;
+  margin: var(--lk-space-2) 0 var(--lk-space-5);
+  padding: var(--lk-space-5) var(--lk-space-5) 0;
+  border-radius: var(--lk-radius-md);
+  background: var(--lk-color-bg-secondary);
+}
+
+.livekit-settings-subgroup .livekit-radio {
+  background: var(--lk-color-bg-tertiary);
 }
 
 /* Signing in to Patreon needs the server type to be saved first */
@@ -1135,36 +1488,35 @@
 
 .livekit-tavern.unsaved .livekit-tavern-unsaved {
   display: block;
-  padding-bottom: 12px;
+  padding-bottom: var(--lk-space-5);
 }
 
 /* Discord's "unsaved changes" bar */
 .livekit-unsaved-bar {
   position: absolute;
-  right: 20px;
-  bottom: 16px;
-  left: 20px;
+  right: var(--lk-space-7);
+  bottom: var(--lk-space-6);
+  left: var(--lk-space-7);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  padding: 10px 10px 10px 16px;
-  border-radius: var(--livekit-radius);
-  background: var(--livekit-bg-floating);
-  box-shadow: var(--livekit-shadow);
-  color: var(--livekit-text);
-  font-weight: 500;
-  animation: livekit-slide-up 0.15s ease-out;
+  gap: var(--lk-space-5);
+  padding: 10px 10px 10px var(--lk-space-6);
+  border-radius: var(--lk-radius-md);
+  background: var(--lk-color-bg-floating);
+  box-shadow: var(--lk-shadow-high);
+  font-weight: var(--lk-font-weight-medium);
+  animation: livekit-slide-up var(--lk-duration-base) var(--lk-ease);
 }
 
 .livekit-unsaved-actions {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: var(--lk-space-6);
 }
 
 .livekit-unsaved-actions .livekit-link-button {
-  color: var(--livekit-text);
+  color: var(--lk-color-text);
 }
 
 @keyframes livekit-slide-up {
@@ -1172,4 +1524,740 @@
     transform: translateY(12px);
     opacity: 0;
   }
+}
+
+/* -------------------------------------------- */
+/*  Camera dock                                 */
+/* -------------------------------------------- */
+
+/* Foundry's #camera-views, drawn by the Discord-style dock */
+#camera-views.livekit-dock {
+  --lk-tile-bg: var(--lk-color-bg-secondary-alt);
+  --lk-ring-gap: var(--lk-tile-bg);
+  position: relative;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  border: none;
+  background: var(--lk-color-bg-tertiary);
+  color: var(--lk-color-text);
+}
+
+#camera-views.livekit-dock[data-placement="left"] {
+  border-right: 1px solid var(--lk-color-border);
+}
+
+#camera-views.livekit-dock[data-placement="right"] {
+  border-left: 1px solid var(--lk-color-border);
+}
+
+#camera-views.livekit-dock.horizontal {
+  height: calc(var(--av-width) * 3 / 4);
+}
+
+#camera-views.livekit-dock[data-placement="top"] {
+  border-bottom: 1px solid var(--lk-color-border);
+}
+
+#camera-views.livekit-dock[data-placement="bottom"] {
+  border-top: 1px solid var(--lk-color-border);
+}
+
+#camera-views.livekit-dock.is-floating {
+  position: fixed;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  border-radius: var(--lk-radius-md);
+  box-shadow: var(--lk-shadow-high);
+}
+
+.livekit-dock-header {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--lk-space-4);
+  min-height: 36px;
+  padding: 0 var(--lk-space-2) 0 var(--lk-space-5);
+  border-bottom: 1px solid var(--lk-color-border);
+  color: var(--lk-color-text-muted);
+  font-weight: var(--lk-font-weight-semibold);
+  user-select: none;
+}
+
+.livekit-dock.is-floating .livekit-dock-header {
+  cursor: grab;
+}
+
+.livekit-dock.is-floating.dragging .livekit-dock-header {
+  cursor: grabbing;
+}
+
+.livekit-dock-title {
+  display: flex;
+  align-items: center;
+  gap: var(--lk-space-3);
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.livekit-dock-tools {
+  display: flex;
+  flex: none;
+}
+
+.livekit-dock-tools .livekit-icon-button {
+  --lk-icon-button-size: 28px;
+  font-size: 14px;
+}
+
+.livekit-dock-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--lk-space-4);
+  min-height: 0;
+  padding: var(--lk-space-4);
+  overflow: auto;
+}
+
+.livekit-dock.horizontal .livekit-dock-body {
+  flex-direction: row;
+}
+
+.livekit-dock-stage:empty {
+  display: none;
+}
+
+.livekit-dock-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 200px), 1fr));
+  align-content: start;
+  gap: var(--lk-space-4);
+}
+
+.livekit-dock.horizontal .livekit-dock-list {
+  display: flex;
+  height: 100%;
+}
+
+.livekit-dock.horizontal .livekit-dock-list .livekit-tile {
+  height: 100%;
+}
+
+/* Focus: one user large, the others in a strip */
+.livekit-dock[data-layout="focus"] .livekit-dock-stage {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+}
+
+.livekit-dock-stage .livekit-tile {
+  flex: 1;
+  min-height: 0;
+}
+
+.livekit-dock.is-floating[data-layout="focus"]
+  .livekit-dock-stage
+  .livekit-tile,
+.livekit-dock.horizontal[data-layout="focus"]
+  .livekit-dock-stage
+  .livekit-tile {
+  aspect-ratio: auto;
+}
+
+.livekit-dock[data-layout="focus"] .livekit-dock-list {
+  display: flex;
+  flex: none;
+  overflow: auto;
+}
+
+.livekit-dock.vertical:not(.is-floating)[data-layout="focus"]
+  .livekit-dock-list {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+}
+
+.livekit-dock.is-floating[data-layout="focus"]
+  .livekit-dock-list
+  .livekit-tile {
+  flex: none;
+  height: 72px;
+}
+
+.livekit-dock.horizontal[data-layout="focus"] .livekit-dock-list {
+  height: 100%;
+}
+
+/* Tiles */
+.livekit-tile {
+  position: relative;
+  flex: none;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border-radius: var(--lk-radius-md);
+  background: var(--lk-tile-bg);
+  cursor: pointer;
+  user-select: none;
+}
+
+.livekit-tile:focus-visible {
+  outline: 2px solid var(--lk-color-focus);
+  outline-offset: 2px;
+}
+
+.livekit-tile-media {
+  position: absolute;
+  inset: 0;
+}
+
+.livekit-tile video.user-camera {
+  display: none;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.livekit-tile.is-video video.user-camera {
+  display: block;
+}
+
+.livekit-tile video.local-camera {
+  transform: scaleX(-1);
+}
+
+.livekit-tile-avatar {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.livekit-tile.is-video .livekit-tile-avatar {
+  display: none;
+}
+
+.livekit-tile-avatar .livekit-avatar {
+  --lk-avatar-size: min(40%, 80px);
+  height: auto;
+  aspect-ratio: 1;
+}
+
+/* The speaking ring, and the user's color with Foundry's border colors */
+.livekit-tile-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  transition: box-shadow var(--lk-duration-fast) var(--lk-ease);
+}
+
+.livekit-tile.has-color .livekit-tile-ring {
+  box-shadow: inset 0 0 0 2px var(--lk-tile-color);
+}
+
+.livekit-tile.is-speaking .livekit-tile-ring {
+  box-shadow:
+    inset 0 0 0 2px var(--lk-color-green),
+    inset 0 0 0 3px var(--lk-tile-bg);
+}
+
+.livekit-tile-footer {
+  position: absolute;
+  right: var(--lk-space-3);
+  bottom: var(--lk-space-3);
+  left: var(--lk-space-3);
+  display: flex;
+  align-items: center;
+  gap: var(--lk-space-2);
+  min-width: 0;
+  pointer-events: none;
+}
+
+.livekit-tile-names {
+  display: flex;
+  align-items: baseline;
+  gap: var(--lk-space-2);
+  min-width: 0;
+  max-width: 100%;
+  padding: var(--lk-space-1) var(--lk-space-3);
+  border-radius: var(--lk-radius-sm);
+  background: var(--lk-color-bg-overlay);
+  color: var(--lk-color-text-header);
+  font-size: var(--lk-font-size-md);
+  font-weight: var(--lk-font-weight-semibold);
+  white-space: nowrap;
+}
+
+.livekit-tile-name,
+.livekit-tile-secondary {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.livekit-tile-secondary {
+  color: var(--lk-color-text-muted);
+  font-size: var(--lk-font-size-sm);
+  font-weight: normal;
+}
+
+.livekit-tile-secondary:empty {
+  display: none;
+}
+
+.livekit-tile.no-nameplate .livekit-tile-names {
+  display: none;
+}
+
+.livekit-tile-badges {
+  display: flex;
+  flex: none;
+  gap: var(--lk-space-1);
+}
+
+.livekit-tile-badges .livekit-badge {
+  width: 20px;
+  height: 20px;
+  font-size: 10px;
+}
+
+/* Connection quality bars, on hover */
+.livekit-quality {
+  display: none;
+  flex: none;
+  align-items: flex-end;
+  gap: 2px;
+  height: 12px;
+  margin-left: auto;
+  padding: var(--lk-space-1) var(--lk-space-2);
+  border-radius: var(--lk-radius-sm);
+  background: var(--lk-color-bg-overlay);
+  box-sizing: content-box;
+  pointer-events: auto;
+}
+
+.livekit-tile:is(:hover, :focus-within) .livekit-quality {
+  display: flex;
+}
+
+.livekit-dock.hide-quality .livekit-quality {
+  display: none;
+}
+
+.livekit-quality > span {
+  width: 3px;
+  border-radius: 1px;
+  background: var(--lk-color-neutral);
+}
+
+.livekit-quality > span:nth-child(1) {
+  height: 4px;
+}
+
+.livekit-quality > span:nth-child(2) {
+  height: 8px;
+}
+
+.livekit-quality > span:nth-child(3) {
+  height: 12px;
+}
+
+.livekit-quality[data-quality="excellent"] > span,
+.livekit-quality[data-quality="good"] > span:nth-child(-n + 2) {
+  background: var(--lk-color-green);
+}
+
+.livekit-quality[data-quality="poor"] > span:nth-child(1) {
+  background: var(--lk-color-yellow);
+}
+
+.livekit-quality[data-quality="lost"] > span:nth-child(1) {
+  background: var(--lk-color-red);
+}
+
+/* Hover controls */
+.livekit-tile-controls {
+  position: absolute;
+  top: var(--lk-space-3);
+  right: var(--lk-space-3);
+  display: none;
+  gap: var(--lk-space-2);
+}
+
+.livekit-tile:is(:hover, :focus-within) .livekit-tile-controls {
+  display: flex;
+}
+
+.livekit-tile-controls .livekit-icon-button {
+  --lk-icon-button-size: 28px;
+  --lk-slash-gap: var(--lk-color-bg-overlay);
+  border-radius: 50%;
+  background: var(--lk-color-bg-overlay);
+  color: var(--lk-color-text-header);
+  font-size: 13px;
+}
+
+.livekit-tile-controls .livekit-icon-button:hover {
+  background: var(--lk-color-bg-floating);
+}
+
+/* Compact: a list of avatars, like a Discord voice channel */
+.livekit-dock[data-layout="compact"] .livekit-dock-list,
+.livekit-dock[data-layout="compact"].horizontal .livekit-dock-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lk-space-1);
+  height: auto;
+}
+
+.livekit-dock[data-layout="compact"] .livekit-tile,
+.livekit-dock[data-layout="compact"].horizontal
+  .livekit-dock-list
+  .livekit-tile {
+  display: flex;
+  align-items: center;
+  gap: var(--lk-space-4);
+  height: auto;
+  min-height: 36px;
+  padding: var(--lk-space-2) var(--lk-space-4);
+  aspect-ratio: auto;
+  border-radius: var(--lk-radius-sm);
+  background: none;
+}
+
+.livekit-dock[data-layout="compact"] .livekit-tile:hover {
+  background: var(--lk-color-bg-hover);
+}
+
+.livekit-dock[data-layout="compact"] .livekit-tile-media,
+.livekit-dock[data-layout="compact"] .livekit-tile-avatar,
+.livekit-dock[data-layout="compact"] .livekit-tile-footer {
+  position: static;
+  display: flex;
+}
+
+.livekit-dock[data-layout="compact"] video.user-camera,
+.livekit-dock[data-layout="compact"] .livekit-tile-ring {
+  display: none;
+}
+
+.livekit-dock[data-layout="compact"] .livekit-tile-avatar .livekit-avatar {
+  --lk-avatar-size: 24px;
+  height: var(--lk-avatar-size);
+}
+
+.livekit-dock[data-layout="compact"] .livekit-tile-footer {
+  flex: 1;
+}
+
+.livekit-dock[data-layout="compact"] .livekit-tile-names {
+  padding: 0;
+  background: none;
+  color: var(--lk-color-text-muted);
+}
+
+.livekit-dock[data-layout="compact"]
+  .livekit-tile.is-speaking
+  .livekit-tile-names {
+  color: var(--lk-color-text-header);
+}
+
+.livekit-dock[data-layout="compact"] .livekit-tile-badges .livekit-badge {
+  background: none;
+}
+
+.livekit-dock[data-layout="compact"] .livekit-tile-controls {
+  position: static;
+}
+
+/* Collapsed: a slim bar of avatars */
+.livekit-dock.is-collapsed.vertical:not(.is-floating) {
+  width: 56px;
+}
+
+#camera-views.livekit-dock.is-collapsed.horizontal {
+  height: auto;
+}
+
+.livekit-dock.is-collapsed.is-floating {
+  height: auto !important;
+}
+
+.livekit-dock.is-collapsed .livekit-dock-title {
+  display: none;
+}
+
+.livekit-dock.is-collapsed .livekit-dock-header {
+  justify-content: center;
+  padding: 0;
+}
+
+.livekit-dock.is-collapsed
+  .livekit-dock-tools
+  .livekit-icon-button:first-child {
+  display: none;
+}
+
+.livekit-dock.is-collapsed .livekit-dock-body {
+  align-items: center;
+  padding: var(--lk-space-4) var(--lk-space-2);
+}
+
+.livekit-dock.is-collapsed .livekit-dock-stage {
+  display: contents;
+}
+
+.livekit-dock.is-collapsed .livekit-dock-list {
+  display: flex;
+  flex-direction: inherit;
+  align-items: center;
+  gap: var(--lk-space-4);
+}
+
+.livekit-dock.is-collapsed .livekit-tile {
+  width: 40px;
+  height: 40px;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: none;
+  overflow: visible;
+}
+
+.livekit-dock.is-collapsed :is(.livekit-tile-footer, .livekit-tile-controls),
+.livekit-dock.is-collapsed .livekit-tile-ring,
+.livekit-dock.is-collapsed video.user-camera {
+  display: none;
+}
+
+.livekit-dock.is-collapsed .livekit-tile-avatar {
+  display: flex;
+}
+
+.livekit-dock.is-collapsed .livekit-tile-avatar .livekit-avatar {
+  --lk-ring-gap: var(--lk-color-bg-tertiary);
+  --lk-avatar-size: 40px;
+  height: 40px;
+}
+
+/* Resizing: the inner edge of a docked dock, the corner of a floating one */
+.livekit-dock > .livekit-resize-handle {
+  position: absolute;
+  z-index: 2;
+}
+
+.livekit-dock[data-placement="left"] > .livekit-resize-handle,
+.livekit-dock[data-placement="right"] > .livekit-resize-handle {
+  top: 0;
+  bottom: 0;
+  width: 6px;
+  cursor: ew-resize;
+}
+
+.livekit-dock[data-placement="left"] > .livekit-resize-handle {
+  right: -3px;
+}
+
+.livekit-dock[data-placement="right"] > .livekit-resize-handle {
+  left: -3px;
+}
+
+.livekit-dock[data-placement="top"] > .livekit-resize-handle,
+.livekit-dock[data-placement="bottom"] > .livekit-resize-handle {
+  right: 0;
+  left: 0;
+  height: 6px;
+  cursor: ns-resize;
+}
+
+.livekit-dock[data-placement="top"] > .livekit-resize-handle {
+  bottom: -3px;
+}
+
+.livekit-dock[data-placement="bottom"] > .livekit-resize-handle {
+  top: -3px;
+}
+
+/* A line along the inner edge shows where to drag, on hover and while resizing */
+.livekit-dock:not([data-placement="float"]) > .livekit-resize-handle::after {
+  position: absolute;
+  inset: 2px;
+  border-radius: 1px;
+  background: var(--lk-color-brand);
+  content: "";
+  opacity: 0;
+  transition: opacity var(--lk-duration-base) var(--lk-ease);
+}
+
+.livekit-dock:not([data-placement="float"])
+  > .livekit-resize-handle:hover::after {
+  opacity: 1;
+  transition-delay: 100ms;
+}
+
+.livekit-dock.resizing:not([data-placement="float"])
+  > .livekit-resize-handle::after {
+  opacity: 1;
+  transition-delay: 0ms;
+}
+
+.livekit-dock.is-collapsed > .livekit-resize-handle {
+  display: none;
+}
+
+.livekit-dock[data-placement="float"] > .livekit-resize-handle,
+.livekit-tile-window > .livekit-resize-handle {
+  right: 0;
+  bottom: 0;
+  width: 14px;
+  height: 14px;
+  cursor: nwse-resize;
+  background: linear-gradient(
+    135deg,
+    transparent 50%,
+    var(--lk-color-neutral) 50%,
+    var(--lk-color-neutral) 60%,
+    transparent 60%,
+    transparent 75%,
+    var(--lk-color-neutral) 75%,
+    var(--lk-color-neutral) 85%,
+    transparent 85%
+  );
+}
+
+/* A tile popped out of the dock */
+.livekit-tile-window {
+  --lk-tile-bg: var(--lk-color-bg-secondary-alt);
+  --lk-ring-gap: var(--lk-tile-bg);
+  position: fixed;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: var(--lk-radius-md);
+  background: var(--lk-color-bg-floating);
+  box-shadow: var(--lk-shadow-high);
+}
+
+.livekit-tile-window > .livekit-resize-handle {
+  position: absolute;
+  z-index: 2;
+}
+
+.livekit-tile-window-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--lk-space-4);
+  padding: 0 var(--lk-space-1) 0 var(--lk-space-4);
+  color: var(--lk-color-text-muted);
+  font-weight: var(--lk-font-weight-semibold);
+  cursor: grab;
+  user-select: none;
+}
+
+.livekit-tile-window.dragging .livekit-tile-window-header {
+  cursor: grabbing;
+}
+
+.livekit-tile-window-header .livekit-icon-button {
+  --lk-icon-button-size: 28px;
+  font-size: 13px;
+}
+
+.livekit-tile-window-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.livekit-tile-window .livekit-tile {
+  border-radius: 0;
+}
+
+/* The voice panel in the dock, like Discord's user panel */
+.livekit-dock-panel {
+  flex: none;
+  border-top: 1px solid var(--lk-color-border);
+}
+
+.livekit-dock-panel:empty {
+  display: none;
+}
+
+.livekit-voice-panel.is-docked {
+  position: static;
+  width: auto;
+  border-radius: 0;
+  box-shadow: none;
+  container-type: inline-size;
+}
+
+.livekit-voice-panel.is-docked .livekit-panel-status {
+  cursor: default;
+}
+
+/* A narrow panel puts its buttons on a row of their own */
+@container (max-width: 279px) {
+  .livekit-voice-panel .livekit-panel-user {
+    flex-wrap: wrap;
+  }
+
+  .livekit-voice-panel .livekit-panel-buttons {
+    justify-content: space-between;
+    width: 100%;
+  }
+}
+
+/* On the top or bottom, the panel is a column on the right */
+#camera-views.livekit-dock.horizontal {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.livekit-dock.horizontal > .livekit-dock-header {
+  grid-column: 1 / -1;
+}
+
+.livekit-dock.horizontal > .livekit-dock-body {
+  grid-row: 2;
+  grid-column: 1;
+}
+
+.livekit-dock.horizontal > .livekit-dock-panel {
+  grid-row: 2;
+  grid-column: 2;
+  width: 300px;
+  overflow: auto;
+  border-top: none;
+  border-left: 1px solid var(--lk-color-border);
+}
+
+/* In the slim bar, only the buttons */
+.livekit-dock.is-collapsed
+  .livekit-voice-panel.is-docked
+  :is(.livekit-panel-status, .livekit-panel-avatar, .livekit-panel-user-info) {
+  display: none;
+}
+
+.livekit-dock.is-collapsed .livekit-voice-panel.is-docked .livekit-panel-user {
+  justify-content: center;
+  padding: var(--lk-space-2);
+}
+
+.livekit-dock.is-collapsed.vertical:not(.is-floating)
+  .livekit-voice-panel.is-docked
+  :is(.livekit-panel-user, .livekit-panel-buttons) {
+  flex-direction: column;
+  align-items: center;
+}
+
+/* The panel's size can't follow its buttons (it is a size container) */
+.livekit-dock.is-collapsed.horizontal > .livekit-dock-panel {
+  width: 184px;
 }

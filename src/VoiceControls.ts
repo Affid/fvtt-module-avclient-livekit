@@ -43,6 +43,40 @@ export default class VoiceControls {
       : this.remoteDeafened.has(userId);
   }
 
+  /**
+   * Whether the user's camera is turned off (Foundry's hidden setting).
+   */
+  isCameraOff(): boolean {
+    return this.client.settings.getUser(this.userId)?.hidden === true;
+  }
+
+  /**
+   * Whether the world uses video and the user may share it.
+   */
+  canUseCamera(): boolean {
+    const { AUDIO_VIDEO, VIDEO } = foundry.av.AVSettings.AV_MODES;
+    const mode = this.client.settings.get("world", "mode");
+    return mode === AUDIO_VIDEO || mode === VIDEO;
+  }
+
+  /**
+   * Turn the camera on or off, as Foundry's camera controls do.
+   */
+  toggleCamera(): void {
+    const settings = this.client.settings.getUser(this.userId);
+    const hidden = settings?.hidden === true;
+    // Turning the camera on needs the permission to broadcast video
+    if (hidden && !settings.canBroadcastVideo) {
+      ui.notifications?.warn("WEBRTC.WarningCannotEnableVideo", {
+        localize: true,
+      });
+      return;
+    }
+    this.client.settings.set("client", `users.${this.userId}.hidden`, !hidden);
+    void ui.webrtc?.render();
+    this.client.onVoiceStateChanged();
+  }
+
   toggleMute(): void {
     const mute = !this.isMuted();
     if (!mute && this.isDeafened()) {

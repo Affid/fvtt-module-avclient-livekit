@@ -1,6 +1,14 @@
 import type { KrispNoiseFilterProcessor } from "@livekit/krisp-noise-filter";
-import { ConnectionState, type Room } from "livekit-client";
+import {
+  ConnectionState,
+  type AudioProcessorOptions,
+  type Room,
+  type Track,
+  type TrackProcessor,
+} from "livekit-client";
+import type { VoiceGateOptions } from "./NoiseSuppressorFilter";
 import { Logger } from "./utils/logger";
+import VoiceActivityGate from "./VoiceActivityGate";
 
 const log = new Logger("KrispNoiseFilter");
 
@@ -44,12 +52,148 @@ export async function isKrispSupported(): Promise<boolean> {
   }
 }
 
+/** The events Krisp sends on its output track to tell LiveKit its state */
+const KRISP_EVENTS = [
+  "enable-lk-krisp-noise-filter",
+  "disable-lk-krisp-noise-filter",
+];
+
 /**
- * Create a Krisp noise filter TrackProcessor.
+ * The parts of the Krisp processor LiveKit and LiveKitClient use, which the
+ * wrapper below provides as well.
  */
-export async function createKrispNoiseFilter(): Promise<KrispNoiseFilterProcessor> {
+export type KrispProcessor = Pick<
+  KrispNoiseFilterProcessor,
+  "onPublish" | "setEnabled" | "isEnabled"
+> &
+  TrackProcessor<Track.Kind.Audio, AudioProcessorOptions> & {
+    gate?: VoiceActivityGate;
+  };
+
+/**
+ * The Krisp processor, optionally followed by the voice activity gate.
+ * Everything LiveKit calls on the processor is passed on to Krisp.
+ *
+ * Krisp turns itself off when it restarts (e.g. when the input device
+ * changes) and would then send the audio unfiltered, so it is turned back on.
+ *
+ * Krisp only hands out its output as a track, so the gate takes that track as
+ * its input. With the gate, Krisp's events on its output track are passed on
+ * from ours, where LiveKit listens for them.
+ */
+class KrispTrackProcessor implements KrispProcessor {
+  readonly name: string;
+  gate?: VoiceActivityGate;
+
+  private audioContext?: AudioContext;
+  private sourceNode?: MediaStreamAudioSourceNode;
+  private destinationNode?: MediaStreamAudioDestinationNode;
+  private krispTrack?: MediaStreamTrack;
+
+  constructor(
+    private readonly krisp: KrispNoiseFilterProcessor,
+    private readonly gateOptions?: VoiceGateOptions,
+  ) {
+    this.name = `${krisp.name}${gateOptions ? "-gate" : ""}`;
+  }
+
+  get processedTrack(): MediaStreamTrack | undefined {
+    return this.gateOptions
+      ? this.destinationNode?.stream.getAudioTracks()[0]
+      : this.krisp.processedTrack;
+  }
+
+  private readonly forwardEvent = (event: Event) => {
+    this.processedTrack?.dispatchEvent(new Event(event.type));
+  };
+
+  async init(opts: AudioProcessorOptions): Promise<void> {
+    this.audioContext = opts.audioContext;
+    try {
+      await this.krisp.init(opts);
+      if (this.gateOptions) {
+        this.gate = await VoiceActivityGate.create(
+          opts.audioContext,
+          this.gateOptions,
+        );
+        this.destinationNode = opts.audioContext.createMediaStreamDestination();
+        this.gate.node.connect(this.destinationNode);
+        this.connectKrispOutput();
+      }
+    } catch (error: unknown) {
+      await this.destroy();
+      throw error;
+    }
+  }
+
+  async restart(opts: AudioProcessorOptions): Promise<void> {
+    const wasEnabled = this.krisp.isEnabled();
+    // Krisp makes a new output track when it restarts
+    await this.krisp.restart(opts);
+    if (this.gateOptions) {
+      this.connectKrispOutput();
+    }
+    if (wasEnabled) {
+      await this.krisp.setEnabled(true);
+    }
+  }
+
+  /**
+   * Feed Krisp's current output track into the gate.
+   */
+  private connectKrispOutput(): void {
+    const krispTrack = this.krisp.processedTrack;
+    if (!krispTrack || !this.audioContext || !this.gate) {
+      throw new Error("The Krisp noise filter has no output");
+    }
+    for (const type of KRISP_EVENTS) {
+      this.krispTrack?.removeEventListener(type, this.forwardEvent);
+      krispTrack.addEventListener(type, this.forwardEvent);
+    }
+    this.krispTrack = krispTrack;
+    this.sourceNode?.disconnect();
+    this.sourceNode = this.audioContext.createMediaStreamSource(
+      new MediaStream([krispTrack]),
+    );
+    this.sourceNode.connect(this.gate.node);
+  }
+
+  onPublish(room: Room): Promise<void> {
+    return this.krisp.onPublish(room);
+  }
+
+  setEnabled(enable: boolean): Promise<boolean | undefined> {
+    return this.krisp.setEnabled(enable);
+  }
+
+  isEnabled(): boolean {
+    return this.krisp.isEnabled();
+  }
+
+  async destroy(): Promise<void> {
+    for (const type of KRISP_EVENTS) {
+      this.krispTrack?.removeEventListener(type, this.forwardEvent);
+    }
+    this.sourceNode?.disconnect();
+    this.gate?.destroy();
+    this.destinationNode?.disconnect();
+    this.sourceNode = undefined;
+    this.gate = undefined;
+    this.destinationNode = undefined;
+    this.krispTrack = undefined;
+    await this.krisp.destroy();
+  }
+}
+
+/**
+ * Create a Krisp noise filter TrackProcessor, followed by a voice activity
+ * gate if given.
+ */
+export async function createKrispNoiseFilter(
+  gate?: VoiceGateOptions,
+): Promise<KrispProcessor> {
   const { KrispNoiseFilter } = await loadKrispModule();
-  return KrispNoiseFilter();
+  return new KrispTrackProcessor(KrispNoiseFilter(), gate);
 }
 
 /**

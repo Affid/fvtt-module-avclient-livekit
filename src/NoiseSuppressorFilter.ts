@@ -5,7 +5,6 @@ import {
   loadSpeex,
   GtcrnWorkletNode,
   loadGtcrn,
-  NoiseGateWorkletNode,
 } from "@sapphi-red/web-noise-suppressor";
 import type {
   AudioProcessorOptions,
@@ -13,6 +12,10 @@ import type {
   TrackProcessor,
 } from "livekit-client";
 import { getModuleAssetRoute } from "./utils/helpers";
+import VoiceActivityGate, {
+  type VoiceGateReport,
+  type VoiceGateSettings,
+} from "./VoiceActivityGate";
 import { Logger } from "./utils/logger";
 
 const log = new Logger("NoiseSuppressorFilter");
@@ -54,14 +57,20 @@ type NoiseWorkletNode =
   | SpeexWorkletNode
   | GtcrnWorkletNode;
 
+/**
+ * A voice activity gate to run after the noise suppression model: its
+ * initial settings, and where it reports to.
+ */
+export interface VoiceGateOptions {
+  settings: VoiceGateSettings;
+  onReport?: (report: VoiceGateReport) => void;
+}
+
 export interface NoiseSuppressorFilterOptions {
   /** The noise suppression model to run, or undefined to only gate. */
   model?: NoiseSuppressorModel;
-  /**
-   * When provided (in dB), a noise gate is chained before the model so quiet
-   * background noise is silenced prior to denoising.
-   */
-  gateThreshold?: number;
+  /** The voice activity gate, if any */
+  gate?: VoiceGateOptions;
 }
 
 /**
@@ -109,8 +118,8 @@ async function loadWasm(
 
 /**
  * A self-contained LiveKit audio TrackProcessor that runs an open-source noise
- * suppression model (via @sapphi-red/web-noise-suppressor) and/or a noise gate
- * entirely in the browser using AudioWorklets. It requires no server-side
+ * suppression model (via @sapphi-red/web-noise-suppressor) and/or a voice
+ * activity gate entirely in the browser using AudioWorklets. It requires no server-side
  * support, so it works with self-hosted LiveKit deployments.
  *
  * Three models are supported:
@@ -124,21 +133,20 @@ export class NoiseSuppressorFilter implements TrackProcessor<
 > {
   name: string;
   processedTrack?: MediaStreamTrack;
+  /** The voice activity gate, while running */
+  gate?: VoiceActivityGate;
 
   private readonly model?: NoiseSuppressorModel;
-  private readonly gateThreshold?: number;
+  private readonly gateOptions?: VoiceGateOptions;
   private audioContext?: AudioContext;
   private sourceNode?: MediaStreamAudioSourceNode;
-  private gateNode?: NoiseGateWorkletNode;
   private workletNode?: NoiseWorkletNode;
   private destinationNode?: MediaStreamAudioDestinationNode;
 
-  constructor({ model, gateThreshold }: NoiseSuppressorFilterOptions) {
+  constructor({ model, gate }: NoiseSuppressorFilterOptions) {
     this.model = model;
-    this.gateThreshold = gateThreshold;
-    this.name = `noise-suppressor-${model ?? "none"}${
-      typeof gateThreshold === "number" ? "-gate" : ""
-    }`;
+    this.gateOptions = gate;
+    this.name = `noise-suppressor-${model ?? "none"}${gate ? "-gate" : ""}`;
   }
 
   async init(opts: AudioProcessorOptions): Promise<void> {
@@ -166,34 +174,42 @@ export class NoiseSuppressorFilter implements TrackProcessor<
     if (this.model) {
       this.workletNode = await this.createWorkletNode(audioContext, this.model);
     }
-    if (typeof this.gateThreshold === "number") {
-      await audioContext.audioWorklet.addModule(
-        getModuleAssetRoute("noise-suppressor/noiseGateWorklet.js"),
+    if (this.gateOptions) {
+      this.gate = await VoiceActivityGate.create(
+        audioContext,
+        this.gateOptions,
       );
-      this.gateNode = new NoiseGateWorkletNode(audioContext, {
-        openThreshold: this.gateThreshold,
-        closeThreshold: this.gateThreshold - 5,
-        holdMs: 90,
-        maxChannels: 1,
-      });
     }
 
+    this.destinationNode = audioContext.createMediaStreamDestination();
+
+    // [model] -> [gate] -> destination, so the gate measures the denoised
+    // audio
+    let lastNode: AudioNode = this.destinationNode;
+    for (const node of [this.gate?.node, this.workletNode].filter(
+      (node) => node !== undefined,
+    )) {
+      node.connect(lastNode);
+      lastNode = node;
+    }
+    this.connectSource(audioContext, track, lastNode);
+
+    this.processedTrack = this.destinationNode.stream.getAudioTracks()[0];
+  }
+
+  /**
+   * Feed a microphone track into the first node of the graph.
+   */
+  private connectSource(
+    audioContext: AudioContext,
+    track: MediaStreamTrack,
+    firstNode: AudioNode,
+  ): void {
+    this.sourceNode?.disconnect();
     this.sourceNode = audioContext.createMediaStreamSource(
       new MediaStream([track]),
     );
-    this.destinationNode = audioContext.createMediaStreamDestination();
-
-    // source -> [gate] -> [model] -> destination
-    let lastNode: AudioNode = this.sourceNode;
-    for (const node of [this.gateNode, this.workletNode]) {
-      if (node) {
-        lastNode.connect(node);
-        lastNode = node;
-      }
-    }
-    lastNode.connect(this.destinationNode);
-
-    this.processedTrack = this.destinationNode.stream.getAudioTracks()[0];
+    this.sourceNode.connect(firstNode);
   }
 
   private async createWorkletNode(
@@ -247,6 +263,13 @@ export class NoiseSuppressorFilter implements TrackProcessor<
   }
 
   async restart(opts: AudioProcessorOptions): Promise<void> {
+    const firstNode = this.workletNode ?? this.gate?.node;
+    if (this.audioContext && firstNode && this.processedTrack) {
+      // Only the microphone changed: keep the model and the gate (and what
+      // the gate learned about the background noise), and the output track
+      this.connectSource(this.audioContext, opts.track, firstNode);
+      return;
+    }
     // LiveKit doesn't pass an AudioContext when restarting a processor (e.g.
     // after the input device changes), so keep using the current one. The
     // types claim it is always set, but it isn't on restart.
@@ -259,7 +282,7 @@ export class NoiseSuppressorFilter implements TrackProcessor<
   destroy(): Promise<void> {
     try {
       this.sourceNode?.disconnect();
-      this.gateNode?.disconnect();
+      this.gate?.destroy();
       this.workletNode?.disconnect();
       this.workletNode?.destroy();
       this.destinationNode?.disconnect();
@@ -269,7 +292,7 @@ export class NoiseSuppressorFilter implements TrackProcessor<
       // Note: the AudioContext is owned by the caller (LiveKitClient) and is
       // intentionally not closed here so it can be reused across tracks.
       this.sourceNode = undefined;
-      this.gateNode = undefined;
+      this.gate = undefined;
       this.workletNode = undefined;
       this.destinationNode = undefined;
       this.audioContext = undefined;

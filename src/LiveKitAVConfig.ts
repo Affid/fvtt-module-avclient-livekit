@@ -9,7 +9,6 @@ import {
 } from "./utils/auth.js";
 import type LiveKitClient from "./LiveKitClient";
 import {
-  InputLevelMeter,
   getPushToTalkBindings,
   keybindRecorder,
   localize,
@@ -17,10 +16,14 @@ import {
   selectInput,
   setPushToTalkKey,
   settingRow,
+  slider,
   switchInput,
+  textInput,
 } from "./ui/controls";
 import { deviceOptions, noiseModelOptions } from "./ui/AudioSettingsPopover";
-import { el, icon } from "./ui/dom";
+import { button } from "./ui/buttons";
+import { el, icon, surface } from "./ui/dom";
+import { InputLevelMeter } from "./ui/LevelMeter";
 import { LiveKitConnectionSettings } from "../types/avclient-livekit";
 
 const log = new Logger("LiveKitAVConfig");
@@ -178,11 +181,14 @@ export default class LiveKitAVConfig
     // @ts-expect-error - calling the protected method of the base application
     await applicationBase()._onRender.call(this, context, options);
     this.meter?.stop();
+    // Rendering shows the saved settings, so stop trying out unsaved ones
+    this.liveKitClient?.previewVoiceGate();
 
     const root = this.element.querySelector("[data-livekit-settings]");
     if (!(root instanceof HTMLElement) || !this.data) {
       return;
     }
+    surface(root);
 
     const isGM = game.user?.isGM ?? false;
     const sections = this.sections().filter(
@@ -195,7 +201,10 @@ export default class LiveKitAVConfig
     // Sidebar navigation
     const navButtons = new Map<string, HTMLButtonElement>();
     const panes = new Map<string, HTMLElement>();
-    const nav = el("nav", { className: "livekit-settings-nav" });
+    const nav = el("nav", {
+      className: "livekit-settings-nav",
+      attrs: { "aria-label": game.i18n?.localize("WEBRTC.Title") ?? "" },
+    });
     for (const group of ["user", "world"] as const) {
       const groupSections = sections.filter(
         (section) => section.gmOnly === (group === "world"),
@@ -245,19 +254,23 @@ export default class LiveKitAVConfig
     // Discord's "unsaved changes" bar
     const unsavedBar = el("div", {
       className: "livekit-unsaved-bar",
-      attrs: { hidden: "" },
+      attrs: { hidden: "", role: "status" },
       children: [
         el("span", { text: localize("unsavedChanges") }),
         el("div", {
           className: "livekit-unsaved-actions",
           children: [
-            this.button(localize("unsavedReset"), "livekit-link-button", () => {
-              void this.render();
+            button({
+              label: localize("unsavedReset"),
+              variant: "link",
+              onClick: () => {
+                void this.render();
+              },
             }),
-            el("button", {
-              className: "livekit-button livekit-button-primary",
-              text: localize("unsavedSave"),
-              attrs: { type: "submit" },
+            button({
+              label: localize("unsavedSave"),
+              variant: "primary",
+              type: "submit",
             }),
           ],
         }),
@@ -298,6 +311,7 @@ export default class LiveKitAVConfig
   ): void {
     this.meter?.stop();
     this.meter = undefined;
+    this.liveKitClient?.previewVoiceGate();
     super._onClose(options);
   }
 
@@ -308,29 +322,12 @@ export default class LiveKitAVConfig
   ): void {
     this.activeSection = id;
     for (const [sectionId, button] of navButtons) {
-      button.classList.toggle("active", sectionId === id);
-      button.setAttribute("aria-current", String(sectionId === id));
+      button.classList.toggle("is-selected", sectionId === id);
+      button.setAttribute("aria-current", sectionId === id ? "page" : "false");
     }
     for (const [sectionId, pane] of panes) {
       pane.hidden = sectionId !== id;
     }
-  }
-
-  private button(
-    text: string,
-    className: string,
-    onClick: () => void,
-  ): HTMLButtonElement {
-    const button = el("button", {
-      className,
-      text,
-      attrs: { type: "button" },
-    });
-    button.addEventListener("click", (event) => {
-      event.preventDefault();
-      onClick();
-    });
-    return button;
   }
 
   /* -------------------------------------------- */
@@ -396,7 +393,9 @@ export default class LiveKitAVConfig
       | "audioEchoCancellation"
       | "audioNoiseSuppression"
       | "audioMusicMode"
-      | "audioNoiseGate"
+      | "audioAutoSensitivity"
+      | "dockFollowSpeaker"
+      | "voicePanelInDock"
       | "discordStyleUI"
       | "displayConnectionQuality"
       | "useExternalAV"
@@ -445,9 +444,6 @@ export default class LiveKitAVConfig
     if (!data || !client) {
       return [];
     }
-    const krispActive =
-      this.liveKitClient?.getAudioProcessingConfig().model === "krisp";
-
     // Devices
     const deviceSelect = (
       key: "audioSrc" | "audioSink",
@@ -491,51 +487,85 @@ export default class LiveKitAVConfig
             }),
           }),
         pushToTalkKey,
-        settingRow({
+        slider({
+          name: "core.rtcClientSettings.voice.pttDelay",
           label: localize("pushToTalkDelay"),
-          hint: localize("pushToTalkDelayHint"),
-          inline: true,
-          control: el("input", {
-            className: "livekit-number",
-            attrs: {
-              type: "number",
-              name: "core.rtcClientSettings.voice.pttDelay",
-              min: "0",
-              step: "10",
-              value: String(client.voice.pttDelay),
-            },
-          }),
+          min: 0,
+          max: 2000,
+          step: 10,
+          value: client.voice.pttDelay,
+          format: (delay) => `${delay.toString()} ms`,
+        }),
+        el("p", {
+          className: "livekit-setting-hint livekit-slider-hint",
+          text: localize("pushToTalkDelayHint"),
         }),
       ],
     });
-    pushToTalkOptions.hidden = client.voice.mode !== "ptt";
+
+    // Input sensitivity, for Voice Activity only. Changes are tried out on
+    // the microphone right away, until saved or undone.
+    const gateSettings = this.liveKitClient?.getVoiceGateSettings() ?? {
+      auto: true,
+      threshold: -50,
+    };
+    const caption = el("span", {
+      className: "livekit-meter-caption",
+      text: `${gateSettings.threshold.toString()} dB`,
+    });
+    const sensitivityHint = el("p", { className: "livekit-setting-hint" });
+    const showSensitivity = () => {
+      this.meter?.setAuto(gateSettings.auto);
+      sensitivityHint.replaceChildren(
+        localize(
+          gateSettings.auto
+            ? "inputSensitivityAutoHint"
+            : "inputSensitivityHint",
+        ),
+        gateSettings.auto ? "" : caption,
+      );
+    };
+    const preview = () => {
+      this.liveKitClient?.previewVoiceGate({ ...gateSettings });
+      showSensitivity();
+    };
+    this.meter = new InputLevelMeter({
+      name: `${MODULE_NAME}.audioNoiseGateThreshold`,
+      settings: gateSettings,
+      onInput: (threshold) => {
+        caption.textContent = `${threshold.toString()} dB`;
+        gateSettings.threshold = threshold;
+        preview();
+      },
+    });
+    const autoSwitch = this.moduleSwitch("audioAutoSensitivity");
+    autoSwitch.querySelector("input")?.addEventListener("change", (event) => {
+      gateSettings.auto = (event.currentTarget as HTMLInputElement).checked;
+      preview();
+    });
+    const sensitivity = this.group(
+      localize("inputSensitivity"),
+      autoSwitch,
+      this.meter.element,
+      sensitivityHint,
+    );
+    showSensitivity();
+
+    const showModeOptions = (mode: string) => {
+      pushToTalkOptions.hidden = mode !== "ptt";
+      sensitivity.hidden = mode !== "always";
+    };
     const inputMode = radioGroup({
       name: "core.rtcClientSettings.voice.mode",
+      label: localize("inputMode"),
       value: client.voice.mode,
       options: [
         { value: "always", label: localize("inputModeVoiceActivity") },
         { value: "ptt", label: localize("inputModePushToTalk") },
       ],
-      onChange: (value) => {
-        pushToTalkOptions.hidden = value !== "ptt";
-      },
+      onChange: showModeOptions,
     });
-
-    // Input sensitivity
-    const threshold =
-      game.settings?.get(MODULE_NAME, "audioNoiseGateThreshold") ?? -50;
-    const caption = el("span", {
-      className: "livekit-meter-caption",
-      text: `${threshold.toString()} dB`,
-    });
-    this.meter = new InputLevelMeter({
-      name: `${MODULE_NAME}.audioNoiseGateThreshold`,
-      threshold,
-      disabled: krispActive,
-      onInput: (value) => {
-        caption.textContent = `${value.toString()} dB`;
-      },
-    });
+    showModeOptions(client.voice.mode);
 
     return [
       this.group(
@@ -545,20 +575,7 @@ export default class LiveKitAVConfig
           deviceSelect("audioSink", data.audioSinks, false),
       ),
       this.group(localize("inputMode"), inputMode, pushToTalkOptions),
-      this.group(
-        localize("inputSensitivity"),
-        this.moduleSwitch("audioNoiseGate", {
-          label: localize("inputSensitivityEnable"),
-          disabled: krispActive,
-          hint: krispActive ? localize("krispRefinementDisabled") : undefined,
-        }),
-        this.meter.element,
-        el("p", {
-          className: "livekit-setting-hint",
-          text: localize("inputSensitivityHint"),
-          children: [caption],
-        }),
-      ),
+      sensitivity,
     ];
   }
 
@@ -568,7 +585,6 @@ export default class LiveKitAVConfig
       return [];
     }
     const options = client.getNoiseModelOptions();
-    const krispActive = client.getAudioProcessingConfig().model === "krisp";
     const modelActive = !!client.getAudioProcessingConfig().model;
 
     return [
@@ -585,10 +601,7 @@ export default class LiveKitAVConfig
           }),
         }),
         this.moduleSwitch("audioEchoCancellation"),
-        this.moduleSwitch("audioAutoGainControl", {
-          disabled: krispActive,
-          hint: krispActive ? localize("krispRefinementDisabled") : undefined,
-        }),
+        this.moduleSwitch("audioAutoGainControl"),
         this.moduleSwitch("audioNoiseSuppression", {
           hint: modelActive
             ? localize("audioNoiseSuppressionModelActive")
@@ -702,6 +715,38 @@ export default class LiveKitAVConfig
         this.clientSwitch("hideDock"),
         this.clientSwitch("hidePlayerList"),
       ),
+      // The Discord-style dock's own options
+      !!this.liveKitClient?.dock &&
+        this.group(
+          localize("appearanceDiscordDock"),
+          settingRow({
+            label: localize("dockLayoutTitle"),
+            control: selectInput({
+              name: `${MODULE_NAME}.dockLayout`,
+              label: localize("dockLayoutTitle"),
+              options: ["grid", "focus", "compact"].map((layout) => ({
+                value: layout,
+                label: localize(`dockLayout.${layout}`),
+              })),
+              value: game.settings?.get(MODULE_NAME, "dockLayout") ?? "grid",
+            }),
+          }),
+          this.moduleSwitch("dockFollowSpeaker", {
+            label: localize("dockFollowSpeaker"),
+            hint: localize("dockFollowSpeakerHint"),
+          }),
+          this.moduleSwitch("voicePanelInDock", {
+            label: localize("voicePanelInDock"),
+            hint: localize("voicePanelInDockHint"),
+          }),
+          switchInput({
+            name: `${MODULE_NAME}.dockFloating.floating`,
+            label: localize("dockFloatingSetting"),
+            hint: localize("dockFloatingSettingHint"),
+            checked:
+              game.settings?.get(MODULE_NAME, "dockFloating").floating === true,
+          }),
+        ),
     ];
   }
 
@@ -749,14 +794,12 @@ export default class LiveKitAVConfig
       settingRow({
         label: localize(`connection.${key}`),
         hint: hintFor(`connection.${key}`),
-        control: el("input", {
-          className: "livekit-text",
+        control: textInput({
+          type,
+          name: `${MODULE_NAME}.liveKitConnectionSettings.${key}`,
+          value: connection[key] ?? "",
           attrs: {
-            type,
-            name: `${MODULE_NAME}.liveKitConnectionSettings.${key}`,
-            value: connection[key] ?? "",
             autocomplete: type === "password" ? "one-time-code" : "off",
-            spellcheck: "false",
           },
         }),
       });
@@ -828,35 +871,36 @@ export default class LiveKitAVConfig
     const tokenInput = settingRow({
       label: localize("tavernAccountToken"),
       hint: localize("tavernAccountTokenHint"),
-      control: el("input", {
-        className: "livekit-text",
-        attrs: {
-          type: "password",
-          name: `${MODULE_NAME}.tavernPatreonToken`,
-          value: token,
-        },
+      control: textInput({
+        type: "password",
+        name: `${MODULE_NAME}.tavernPatreonToken`,
+        value: token,
       }),
     });
 
+    const patreonIcon = el("i", {
+      className: "fa-brands fa-patreon",
+      attrs: { "aria-hidden": "true" },
+    });
     const account = token
-      ? this.button(
-          localize("tavernAccountLogoutLabel"),
-          "livekit-button",
-          () => {
+      ? button({
+          label: localize("tavernAccountLogoutLabel"),
+          icon: patreonIcon,
+          onClick: () => {
             this._patreonLogout(authServer).catch((error: unknown) => {
               log.error("Error logging out of Patreon account", error);
             });
           },
-        )
-      : this.button(
-          localize("tavernAccountPatreonLabel"),
-          "livekit-button livekit-button-patreon",
-          () => {
+        })
+      : button({
+          label: localize("tavernAccountPatreonLabel"),
+          variant: "patreon",
+          icon: patreonIcon,
+          onClick: () => {
             this.patreonLogin(authServer);
             tokenInput.hidden = false;
           },
-        );
-    account.prepend(el("i", { className: "fa-brands fa-patreon" }));
+        });
     tokenInput.hidden = true;
 
     return el("div", {
@@ -909,10 +953,10 @@ export default class LiveKitAVConfig
     const debug = game.settings?.get(MODULE_NAME, "debug") ?? false;
     const devMode = game.settings?.get(MODULE_NAME, "devMode") ?? false;
 
-    const resetRoom = this.button(
-      localize("resetRoomButton"),
-      "livekit-button livekit-button-danger",
-      () => {
+    const resetRoom = button({
+      label: localize("resetRoomButton"),
+      variant: "danger",
+      onClick: () => {
         game.settings
           ?.set(MODULE_NAME, "resetRoom", true)
           .then(() => {
@@ -922,7 +966,7 @@ export default class LiveKitAVConfig
             log.error("Error resetting the meeting room", error);
           });
       },
-    );
+    });
 
     // Trace logging needs debug logging; unlock it as soon as debug is on
     const debugSwitch = this.moduleSwitch("debug");
@@ -960,13 +1004,9 @@ export default class LiveKitAVConfig
             settingRow({
               label: localize("authServer"),
               hint: localize("authServerHint"),
-              control: el("input", {
-                className: "livekit-text",
-                attrs: {
-                  type: "text",
-                  name: `${MODULE_NAME}.authServer`,
-                  value: game.settings?.get(MODULE_NAME, "authServer") ?? "",
-                },
+              control: textInput({
+                name: `${MODULE_NAME}.authServer`,
+                value: game.settings?.get(MODULE_NAME, "authServer") ?? "",
               }),
             }),
         ),
@@ -1152,7 +1192,10 @@ export default class LiveKitAVConfig
         document: true,
       })._source.value;
 
-      if (setting.key === "liveKitConnectionSettings") {
+      if (
+        setting.key === "liveKitConnectionSettings" ||
+        setting.key === "dockFloating"
+      ) {
         // We need to handle this one as an object and merge the settings
         const priorValueObject = game.settings?.get(
           // @ts-expect-error - document: true handling is not in foundry-vtt-types

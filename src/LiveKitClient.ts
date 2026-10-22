@@ -35,14 +35,19 @@ import {
   DEFAULT_NOISE_SUPPRESSION_MODEL,
   NOISE_SUPPRESSION_SAMPLE_RATE,
   type NoiseCancellationModel,
-  type NoiseSuppressorFilterOptions,
+  type VoiceGateOptions,
 } from "./NoiseSuppressorFilter";
 import {
   createKrispNoiseFilter,
   isKrispSupported,
   isLiveKitCloud,
+  type KrispProcessor,
 } from "./KrispNoiseFilter";
-import type { KrispNoiseFilterProcessor } from "@livekit/krisp-noise-filter";
+import VoiceActivityGate, {
+  VoiceGateError,
+  type VoiceGateReport,
+  type VoiceGateSettings,
+} from "./VoiceActivityGate";
 import { LANG_NAME, MODULE_NAME } from "./utils/constants";
 import LiveKitAVClient from "./LiveKitAVClient";
 import {
@@ -58,12 +63,19 @@ import VoiceControls from "./VoiceControls";
 import UserAudioMixer from "./UserAudioMixer";
 import AudioSettingsPopover from "./ui/AudioSettingsPopover";
 import CameraViewDecorator from "./ui/CameraViewDecorator";
-import UserVolumeMenu from "./ui/UserVolumeMenu";
+import NoiseModelMenu from "./ui/NoiseModelMenu";
+import ConnectionPopover from "./ui/ConnectionPopover";
+import PlayersListDecorator from "./ui/PlayersListDecorator";
+import UserMenu from "./ui/UserMenu";
+import LiveKitCameraViews from "./ui/dock/LiveKitCameraViews";
 import VoicePanel from "./ui/VoicePanel";
 
 const log = new Logger();
 
 const NO_AUDIO_PROCESSOR = "none";
+
+/** The ID of the hidden element holding remote users' audio elements */
+const AUDIO_CONTAINER_ID = "livekit-audio";
 
 /**
  * Whether the user has ever saved a client setting of this module (rather
@@ -79,25 +91,29 @@ function isClientSettingStored(key: string): boolean {
 }
 
 /**
- * The client-side audio processing to run on the local microphone. Krisp is
- * never combined with the noise gate.
+ * The client-side audio processing to run on the local microphone: a noise
+ * suppression model, then the voice activity gate.
  */
-type AudioProcessingConfig =
-  | NoiseSuppressorFilterOptions
-  | { model: "krisp"; gateThreshold?: undefined };
+interface AudioProcessingConfig {
+  model?: NoiseCancellationModel;
+  gate?: boolean;
+}
 
 /**
  * A key identifying a client-side audio processor configuration, used to tell
- * whether the processor on a track needs to be replaced.
+ * whether the processor on a track needs to be replaced. The gate's settings
+ * are not part of it, as they change on the running gate.
  */
-function getAudioProcessorKey({
-  model,
-  gateThreshold,
-}: AudioProcessingConfig): string {
-  if (!model && gateThreshold === undefined) {
+function getAudioProcessorKey({ model, gate }: AudioProcessingConfig): string {
+  if (!model && !gate) {
     return NO_AUDIO_PROCESSOR;
   }
-  return `${model ?? NO_AUDIO_PROCESSOR}|gate:${gateThreshold?.toString() ?? "off"}`;
+  return `${model ?? NO_AUDIO_PROCESSOR}|gate:${gate ? "on" : "off"}`;
+}
+
+/** A processor that may run a voice activity gate */
+interface GatedProcessor {
+  gate?: VoiceActivityGate;
 }
 
 export enum InitState {
@@ -123,12 +139,17 @@ export default class LiveKitClient {
     verified?: boolean;
   } | null = null;
   failedAudioProcessors = new Set<string>();
+  /** The users who are speaking, as LiveKit (or our voice gate) tells */
+  private readonly speakingUsers = new Set<string>();
+  /** The voice activity gate failed to start; audio is sent without it */
+  voiceGateFailed = false;
+  private voiceGatePreview?: VoiceGateSettings;
+  private readonly voiceGateListeners = new Set<
+    (report: VoiceGateReport) => void
+  >();
+  private gateSpeaking = false;
   krispSupported: boolean | undefined;
   liveKitServerAddress: string | undefined;
-  noiseModelMenu: HTMLElement | null = null;
-  noiseModelMenuDismiss: ((event: Event) => void) | null = null;
-  noiseModelMenuTimeout: number | null = null;
-  noiseModelMenuAnchor: HTMLElement | null = null;
   scheduleAudioSourceChange: () => void = () => undefined;
   scheduleAudioProcessingRefresh: () => void = () => undefined;
 
@@ -136,8 +157,11 @@ export default class LiveKitClient {
   readonly voiceControls = new VoiceControls(this);
   readonly userAudioMixer = new UserAudioMixer(this);
   readonly cameraViewDecorator = new CameraViewDecorator(this);
-  readonly userVolumeMenu = new UserVolumeMenu(this);
+  readonly userMenu = new UserMenu(this);
   readonly audioSettingsPopover = new AudioSettingsPopover(this);
+  readonly noiseModelMenu = new NoiseModelMenu(this);
+  readonly connectionPopover = new ConnectionPopover(this);
+  readonly playersList = new PlayersListDecorator(this);
   private voicePanelInstance?: VoicePanel;
   breakoutRoom: string | undefined;
   connectionState: ConnectionState = ConnectionState.Disconnected;
@@ -293,8 +317,8 @@ export default class LiveKitClient {
       return;
     }
 
-    // Remove any stale menu left over from a previous render
-    this.closeNoiseModelMenu();
+    // Close a menu left open against a button from a previous render
+    this.noiseModelMenu.close();
 
     const noiseButton = document.createElement("button");
     noiseButton.type = "button";
@@ -306,7 +330,7 @@ export default class LiveKitClient {
     noiseButton.addEventListener("click", (event) => {
       event.preventDefault();
       event.stopPropagation();
-      this.toggleNoiseModelMenu(noiseButton);
+      this.noiseModelMenu.toggle(noiseButton);
     });
     element.before(noiseButton);
   }
@@ -316,7 +340,7 @@ export default class LiveKitClient {
    * current settings.
    * @param {HTMLElement} button   The noise model selector button
    */
-  private updateNoiseModelButton(button: HTMLElement): void {
+  updateNoiseModelButton(button: HTMLElement): void {
     const model = this.getSelectedNoiseModel();
     button.classList.toggle("active", model !== "none");
 
@@ -405,125 +429,6 @@ export default class LiveKitClient {
   }
 
   /**
-   * Toggle the noise model selection menu open or closed for the given button.
-   * @param {HTMLElement} button    The button that opens the menu
-   * @param {HTMLElement} anchor    The element to show the menu above
-   */
-  toggleNoiseModelMenu(button: HTMLElement, anchor = button): void {
-    if (this.noiseModelMenu) {
-      this.closeNoiseModelMenu();
-      return;
-    }
-    this.openNoiseModelMenu(button, anchor);
-  }
-
-  /**
-   * Open a popup menu above the given anchor. The menu lets the user pick the
-   * active noise cancellation model (or "None"), toggle the audio refinements
-   * (auto gain control, echo cancellation), and reset everything to defaults.
-   */
-  private openNoiseModelMenu(button: HTMLElement, anchor: HTMLElement): void {
-    this.closeNoiseModelMenu();
-
-    const menu = document.createElement("div");
-    menu.className = "livekit-noise-menu";
-    document.body.append(menu);
-    this.noiseModelMenu = menu;
-    this.noiseModelMenuAnchor = anchor;
-
-    this.renderNoiseMenuContent(menu, button);
-    this.positionNoiseMenu(menu, anchor);
-
-    // Close the menu when clicking anywhere outside of it or the button
-    this.noiseModelMenuDismiss = (dismissEvent: Event) => {
-      const target = dismissEvent.target;
-      if (
-        target instanceof Node &&
-        (menu.contains(target) || button.contains(target))
-      ) {
-        return;
-      }
-      this.closeNoiseModelMenu();
-    };
-    // Defer attaching so the opening click doesn't immediately dismiss it
-    this.noiseModelMenuTimeout = window.setTimeout(() => {
-      this.noiseModelMenuTimeout = null;
-      if (this.noiseModelMenuDismiss) {
-        document.addEventListener(
-          "pointerdown",
-          this.noiseModelMenuDismiss,
-          true,
-        );
-      }
-    }, 0);
-  }
-
-  /**
-   * Position the menu just above the given button using fixed positioning so it
-   * is not clipped by the camera view container.
-   */
-  private positionNoiseMenu(menu: HTMLElement, button: HTMLElement): void {
-    const rect = button.getBoundingClientRect();
-    menu.style.position = "fixed";
-    menu.style.left = `${Math.round(rect.left).toString()}px`;
-    menu.style.bottom = `${Math.round(
-      window.innerHeight - rect.top + 4,
-    ).toString()}px`;
-
-    // Keep the menu within the viewport horizontally
-    const menuRect = menu.getBoundingClientRect();
-    if (menuRect.right > window.innerWidth) {
-      menu.style.left = `${Math.round(
-        window.innerWidth - menuRect.width - 4,
-      ).toString()}px`;
-    }
-  }
-
-  /**
-   * Create a menu button with a leading icon, a label, and an optional detail
-   * line. Passing a null click handler creates a disabled item.
-   */
-  private createNoiseMenuItem(
-    iconClass: string,
-    labelText: string,
-    onClick: (() => Promise<unknown> | undefined) | null,
-    detailText?: string,
-  ): HTMLButtonElement {
-    const item = document.createElement("button");
-    item.type = "button";
-    item.className = "livekit-noise-menu-item";
-
-    const icon = document.createElement("i");
-    icon.className = `fa-solid fa-fw ${iconClass}`;
-    item.append(icon);
-
-    const label = document.createElement("span");
-    label.textContent = labelText;
-    if (detailText) {
-      const detail = document.createElement("small");
-      detail.className = "livekit-noise-menu-detail";
-      detail.textContent = detailText;
-      label.append(detail);
-    }
-    item.append(label);
-
-    if (onClick) {
-      item.addEventListener("click", (event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        onClick()?.catch((error: unknown) => {
-          log.error("Error applying noise menu selection:", error);
-        });
-      });
-    } else {
-      item.disabled = true;
-      item.classList.add("disabled");
-    }
-
-    return item;
-  }
-
-  /**
    * The noise cancellation models to offer, with their labels and whether
    * they can be selected. Krisp is only offered on LiveKit Cloud, but is still
    * listed (as unavailable) if it is the saved selection.
@@ -569,129 +474,6 @@ export default class LiveKitClient {
   }
 
   /**
-   * (Re)build the contents of the noise menu to reflect the current settings.
-   * Rebuilding replaces all child nodes, so the event listeners attached to the
-   * previous nodes are released for garbage collection.
-   */
-  private renderNoiseMenuContent(menu: HTMLElement, button: HTMLElement): void {
-    menu.replaceChildren();
-
-    const krispActive = this.getAudioProcessingConfig().model === "krisp";
-
-    // Refresh helper: rebuild + reposition + update the buttons
-    const refresh = () => {
-      if (this.noiseModelMenu === menu) {
-        this.renderNoiseMenuContent(menu, button);
-        this.positionNoiseMenu(menu, this.noiseModelMenuAnchor ?? button);
-      }
-      this.updateNoiseModelButton(button);
-      this.onVoiceStateChanged();
-    };
-
-    const appendSection = (className: string, text?: string) => {
-      const section = document.createElement("div");
-      section.className = className;
-      if (text) {
-        section.textContent = text;
-      }
-      menu.append(section);
-    };
-
-    // Header
-    appendSection(
-      "livekit-noise-menu-header",
-      game.i18n?.localize(`${LANG_NAME}.noiseSuppressionModel`) ??
-        "Noise Cancellation",
-    );
-
-    // Model options. Unavailable options can't be picked, but stay visible
-    // when selected.
-    for (const option of this.getNoiseModelOptions()) {
-      const item = this.createNoiseMenuItem(
-        option.selected ? "fa-check" : "",
-        option.label,
-        option.selectable || option.selected
-          ? () => this.selectNoiseModel(option.model).then(refresh)
-          : null,
-        option.detail,
-      );
-      item.classList.toggle("active", option.selected);
-      menu.append(item);
-    }
-
-    // Divider + refinements subheader
-    appendSection("livekit-noise-menu-divider");
-    appendSection(
-      "livekit-noise-menu-subheader",
-      game.i18n?.localize(`${LANG_NAME}.noiseRefinements`) ?? "Refinements",
-    );
-
-    // Refinement toggles. These apply whether or not a model is selected,
-    // except auto gain control, which is not used while Krisp is active. The
-    // noise gate is in the voice settings, as the input sensitivity.
-    const krispDisabledDetail = game.i18n?.localize(
-      `${LANG_NAME}.krispRefinementDisabled`,
-    );
-    const toggles: {
-      key: "audioAutoGainControl" | "audioEchoCancellation";
-      disabled: boolean;
-    }[] = [
-      { key: "audioAutoGainControl", disabled: krispActive },
-      { key: "audioEchoCancellation", disabled: false },
-    ];
-    for (const { key, disabled } of toggles) {
-      const value = game.settings?.get(MODULE_NAME, key) ?? false;
-      const item = this.createNoiseMenuItem(
-        value ? "fa-square-check" : "fa-square",
-        game.i18n?.localize(`${LANG_NAME}.${key}`) ?? key,
-        disabled
-          ? null
-          : () => game.settings?.set(MODULE_NAME, key, !value).then(refresh),
-        disabled ? krispDisabledDetail : undefined,
-      );
-      item.classList.add("toggle");
-      item.classList.toggle("active", value && !disabled);
-      menu.append(item);
-    }
-
-    // Divider + reset to defaults
-    appendSection("livekit-noise-menu-divider");
-    const reset = this.createNoiseMenuItem(
-      "fa-rotate-left",
-      game.i18n?.localize(`${LANG_NAME}.noiseResetDefaults`) ??
-        "Reset to defaults",
-      () => this.resetNoiseSettings().then(refresh),
-    );
-    reset.classList.add("reset");
-    menu.append(reset);
-  }
-
-  /**
-   * Close and clean up the noise model selection menu if it is open. Removes the
-   * outside-click listener, cancels the pending attach timeout, and detaches the
-   * menu element so all of its child listeners can be garbage collected.
-   */
-  private closeNoiseModelMenu(): void {
-    if (this.noiseModelMenuTimeout !== null) {
-      window.clearTimeout(this.noiseModelMenuTimeout);
-      this.noiseModelMenuTimeout = null;
-    }
-    if (this.noiseModelMenuDismiss) {
-      document.removeEventListener(
-        "pointerdown",
-        this.noiseModelMenuDismiss,
-        true,
-      );
-      this.noiseModelMenuDismiss = null;
-    }
-    if (this.noiseModelMenu) {
-      this.noiseModelMenu.remove();
-      this.noiseModelMenu = null;
-    }
-    this.noiseModelMenuAnchor = null;
-  }
-
-  /**
    * Apply a noise model selection. Selecting "none" disables enhanced noise
    * cancellation; selecting a model enables it and sets the active model.
    */
@@ -716,19 +498,35 @@ export default class LiveKitClient {
    * stale saved state (for example an old model that is no longer offered). The
    * settings' onChange handlers coalesce into a single debounced refresh.
    */
-  private async resetNoiseSettings(): Promise<void> {
+  async resetNoiseSettings(): Promise<void> {
     await this.selectNoiseModel(this.getDefaultNoiseModel());
     await game.settings?.set(MODULE_NAME, "audioAutoGainControl", true);
     await game.settings?.set(MODULE_NAME, "audioEchoCancellation", true);
     await game.settings?.set(MODULE_NAME, "audioNoiseSuppression", true);
-    await game.settings?.set(MODULE_NAME, "audioNoiseGate", false);
+    await game.settings?.set(MODULE_NAME, "audioAutoSensitivity", true);
     await game.settings?.set(MODULE_NAME, "audioNoiseGateThreshold", -50);
+  }
+
+  /**
+   * Refresh the noise suppression controls after a noise setting changed.
+   */
+  onNoiseSettingsChanged(): void {
+    for (const button of document.querySelectorAll<HTMLElement>(
+      ".livekit-noise-control",
+    )) {
+      this.updateNoiseModelButton(button);
+    }
+    this.onVoiceStateChanged();
   }
 
   /**
    * The Discord-style voice panel. It is created on first use, once Foundry's
    * localization is available.
    */
+  get voicePanelIfCreated(): VoicePanel | undefined {
+    return this.voicePanelInstance;
+  }
+
   get voicePanel(): VoicePanel {
     this.voicePanelInstance ??= new VoicePanel(this);
     return this.voicePanelInstance;
@@ -744,9 +542,11 @@ export default class LiveKitClient {
       !this.useExternalAV;
     document.body.classList.toggle("livekit-discord-ui", enabled);
     if (!enabled) {
-      this.userVolumeMenu.close();
+      this.userMenu.close();
       this.audioSettingsPopover.close();
+      this.connectionPopover.close();
     }
+    this.playersList.refresh();
     this.voicePanel.sync();
     this.cameraViewDecorator.refreshAll();
   }
@@ -763,7 +563,76 @@ export default class LiveKitClient {
       this.userAudioMixer.applyAll();
       this.cameraViewDecorator.refreshAll();
     }
+    this.playersList.refresh(userId);
+    this.dock?.refresh();
     this.voicePanelInstance?.update();
+  }
+
+  /**
+   * The Discord-style camera dock, when it is Foundry's camera dock.
+   */
+  get dock(): LiveKitCameraViews | undefined {
+    return ui.webrtc instanceof LiveKitCameraViews ? ui.webrtc : undefined;
+  }
+
+  isUserSpeaking(userId: string): boolean {
+    return this.speakingUsers.has(userId);
+  }
+
+  /**
+   * Whether a user's microphone is muted or off. Users we have no LiveKit
+   * participant for are not shown as muted, since we don't know.
+   */
+  isUserMuted(userId: string): boolean {
+    if (userId === game.user?.id) {
+      return this.voiceControls.isMuted() || !this.audioTrack;
+    }
+    const participant = this.liveKitParticipants.get(userId);
+    if (!(participant instanceof RemoteParticipant)) {
+      return false;
+    }
+    const publication = participant.getTrackPublication(
+      Track.Source.Microphone,
+    );
+    return !publication || publication.isMuted;
+  }
+
+  /**
+   * The round trip time to the server, in milliseconds, from the statistics
+   * of the microphone, or of the camera while the microphone sends nothing
+   * (e.g. with push to talk).
+   */
+  async getPingMs(): Promise<number | undefined> {
+    const audio = await this.audioTrack?.getSenderStats();
+    let rtt = audio?.roundTripTime;
+    if (rtt === undefined) {
+      const video = await this.videoTrack?.getSenderStats();
+      rtt = video?.find(
+        (layer) => layer.roundTripTime !== undefined,
+      )?.roundTripTime;
+    }
+    return rtt === undefined ? undefined : Math.round(rtt * 1000);
+  }
+
+  /**
+   * The codec the microphone is sent with, e.g. "opus".
+   */
+  getAudioCodec(): string | undefined {
+    return this.audioTrack?.sender
+      ?.getParameters()
+      .codecs.at(0)
+      ?.mimeType.replace(/^audio\//, "");
+  }
+
+  /**
+   * Whether a user's camera is sending video.
+   */
+  isUserVideoOn(userId: string): boolean {
+    const track =
+      userId === game.user?.id
+        ? this.videoTrack
+        : this.getUserVideoTrack(userId);
+    return !!track && !track.isMuted;
   }
 
   addConnectionQualityIndicator(userId: string): void {
@@ -960,10 +829,10 @@ export default class LiveKitClient {
             this.videoTrack,
             this.trackPublishOptions,
           );
-          const userVideoElement = document.querySelector(
-            `.camera-view[data-user="${game.user?.id ?? ""}"] video.user-video`,
+          const userVideoElement = this.getUserVideoElement(
+            game.user?.id ?? "",
           );
-          if (userVideoElement instanceof HTMLVideoElement) {
+          if (userVideoElement) {
             this.attachVideoTrack(this.videoTrack, userVideoElement);
           }
           game.user?.broadcastActivity({ av: { hidden: false } });
@@ -1019,11 +888,6 @@ export default class LiveKitClient {
       const { model } = this.getAudioProcessingConfig();
       if (model) {
         audioCaptureOptions.noiseSuppression = false;
-      }
-      // Krisp works on the unprocessed level, so auto gain control (like the
-      // noise gate) is not used with it
-      if (model === "krisp") {
-        audioCaptureOptions.autoGainControl = false;
       }
     }
 
@@ -1130,39 +994,57 @@ export default class LiveKitClient {
    * @param {HTMLVideoElement} videoElement   The HTMLVideoElement of the user
    * @return {HTMLAudioElement|null}
    */
+  /**
+   * The audio element playing one of a user's audio tracks. Audio elements
+   * live in a hidden container of their own rather than in the camera views,
+   * so re-rendering, hiding, or moving a camera view never interrupts audio.
+   * @param _videoElement   Not used; kept for compatibility
+   */
   getUserAudioElement(
     userId: string,
-    videoElement: HTMLVideoElement | null = null,
+    _videoElement: HTMLVideoElement | null,
     audioType: Track.Source,
-  ): HTMLAudioElement | null {
-    // Find an existing audio element
-    let audioElement = ui.webrtc?.element.querySelector(
-      `.camera-view[data-user="${userId}"] audio.user-${audioType}-audio`,
+  ): HTMLAudioElement {
+    let container = document.getElementById(AUDIO_CONTAINER_ID);
+    if (!container) {
+      container = document.createElement("div");
+      container.id = AUDIO_CONTAINER_ID;
+      container.hidden = true;
+      document.body.append(container);
+    }
+    let audioElement = container.querySelector<HTMLAudioElement>(
+      `audio[data-user="${userId}"][data-source="${audioType}"]`,
     );
-
-    // If one doesn't exist, create it
-    if (!audioElement && videoElement) {
+    if (!audioElement) {
       audioElement = document.createElement("audio");
       audioElement.className = `user-${audioType}-audio`;
-      if (audioElement instanceof HTMLAudioElement) {
-        audioElement.autoplay = true;
-      }
-      videoElement.after(audioElement);
-
-      // Bind volume control for microphone audio
-      const volumeSlider =
-        videoElement.parentElement?.parentElement?.querySelector(
-          ".webrtc-volume-slider",
-        );
-      volumeSlider?.addEventListener("change", this.onVolumeChange.bind(this));
+      audioElement.dataset.user = userId;
+      audioElement.dataset.source = audioType;
+      audioElement.autoplay = true;
+      container.append(audioElement);
     }
+    return audioElement;
+  }
 
-    if (audioElement instanceof HTMLAudioElement) {
-      return audioElement;
-    }
+  /**
+   * All of a user's audio elements (see getUserAudioElement).
+   */
+  getUserAudioElements(userId: string): HTMLAudioElement[] {
+    return [
+      ...document.querySelectorAll<HTMLAudioElement>(
+        `#${AUDIO_CONTAINER_ID} audio[data-user="${userId}"]`,
+      ),
+    ];
+  }
 
-    // The audio element was not found or created
-    return null;
+  /**
+   * The video element of a user's camera view, if it is rendered.
+   */
+  getUserVideoElement(userId: string): HTMLVideoElement | null {
+    const camera = ui.webrtc as unknown as
+      | { getUserVideoElement?: (userId: string) => HTMLVideoElement | null }
+      | undefined;
+    return camera?.getUserVideoElement?.(userId) ?? null;
   }
 
   async initializeLocalTracks(): Promise<void> {
@@ -1243,25 +1125,22 @@ export default class LiveKitClient {
     }
 
     const selectedModel = this.getSelectedNoiseModel();
-    const gateThreshold =
-      (game.settings?.get(MODULE_NAME, "audioNoiseGate") ?? false)
-        ? (game.settings?.get(MODULE_NAME, "audioNoiseGateThreshold") ?? -50)
-        : undefined;
+    // The gate decides when to send audio in Voice Activity mode; with push
+    // to talk, the key does
+    const gate =
+      this.settings.get("client", "voice.mode") === "always" &&
+      !this.voiceGateFailed;
 
     const candidates: AudioProcessingConfig[] = [];
     if (selectedModel === "krisp") {
       if (this.isKrispAvailable()) {
-        // The noise gate is not used with Krisp
-        candidates.push({ model: "krisp" });
+        candidates.push({ model: "krisp", gate });
       }
-      candidates.push({
-        model: DEFAULT_NOISE_SUPPRESSION_MODEL,
-        gateThreshold,
-      });
+      candidates.push({ model: DEFAULT_NOISE_SUPPRESSION_MODEL, gate });
     } else {
       candidates.push({
         model: selectedModel === "none" ? undefined : selectedModel,
-        gateThreshold,
+        gate,
       });
     }
 
@@ -1322,10 +1201,16 @@ export default class LiveKitClient {
         // LiveKit requires an AudioContext to be set on the track before a
         // processor can be attached, so we provide our own 48kHz context here.
         track.setAudioContext(this.getAudioProcessorContext());
+        const gate: VoiceGateOptions | undefined = config.gate
+          ? {
+              settings: this.getVoiceGateSettings(),
+              onReport: this.onVoiceGateReport,
+            }
+          : undefined;
         await track.setProcessor(
           config.model === "krisp"
-            ? await createKrispNoiseFilter()
-            : new NoiseSuppressorFilter(config),
+            ? await createKrispNoiseFilter(gate)
+            : new NoiseSuppressorFilter({ model: config.model, gate }),
         );
         this.audioProcessorState = { track, key };
         log.info("Audio processor applied to local audio track:", key);
@@ -1335,21 +1220,29 @@ export default class LiveKitClient {
       }
     } catch (error: unknown) {
       log.error("Error applying audio processor", key, error);
-      this.failedAudioProcessors.add(key);
       this.audioProcessorState = { track, key: NO_AUDIO_PROCESSOR };
       if (track.getProcessor()) {
         await track.stopProcessor();
       }
 
-      const fallbackModel = this.getAudioProcessingConfig().model;
-      ui.notifications?.warn(
-        game.i18n?.format(`${LANG_NAME}.noiseSuppressionFailed`, {
-          model: this.getNoiseModelLabel(config.model ?? "none"),
-          fallback: fallbackModel
-            ? this.getNoiseModelLabel(fallbackModel)
-            : game.i18n.localize(`${LANG_NAME}.noiseSuppressionBrowser`),
-        }) ?? "noiseSuppressionFailed",
-      );
+      if (error instanceof VoiceGateError) {
+        // Keep the noise suppression model, without the gate
+        this.voiceGateFailed = true;
+        ui.notifications?.warn(`${LANG_NAME}.voiceGateFailed`, {
+          localize: true,
+        });
+      } else {
+        this.failedAudioProcessors.add(key);
+        const fallbackModel = this.getAudioProcessingConfig().model;
+        ui.notifications?.warn(
+          game.i18n?.format(`${LANG_NAME}.noiseSuppressionFailed`, {
+            model: this.getNoiseModelLabel(config.model ?? "none"),
+            fallback: fallbackModel
+              ? this.getNoiseModelLabel(fallbackModel)
+              : game.i18n.localize(`${LANG_NAME}.noiseSuppressionBrowser`),
+          }) ?? "noiseSuppressionFailed",
+        );
+      }
 
       // Apply the fallback. This terminates: every failure adds to the failed
       // set, and no processing at all cannot fail.
@@ -1369,9 +1262,7 @@ export default class LiveKitClient {
       // Not published yet: this is checked again after publishing
       return;
     }
-    const processor = track.getProcessor() as
-      | KrispNoiseFilterProcessor
-      | undefined;
+    const processor = track.getProcessor() as KrispProcessor | undefined;
     // Resolves to undefined if it was already enabled
     if ((await processor?.setEnabled(true)) === false) {
       throw new Error("The Krisp noise filter could not be enabled");
@@ -1392,6 +1283,7 @@ export default class LiveKitClient {
     const refresh = async () => {
       if (retryFailed) {
         this.failedAudioProcessors.clear();
+        this.voiceGateFailed = false;
       }
       const track = this.audioTrack;
       if (!track) {
@@ -1414,6 +1306,8 @@ export default class LiveKitClient {
 
       await this.restartAudioCapture(track);
       await this.applyAudioProcessors(track);
+      this.applyVoiceGateSettings();
+      this.updateGateSpeaking();
     };
 
     this.audioProcessingQueue = this.audioProcessingQueue
@@ -1422,6 +1316,84 @@ export default class LiveKitClient {
         log.error("Error refreshing audio processing:", error);
       });
     return this.audioProcessingQueue;
+  }
+
+  /* -------------------------------------------- */
+  /*  Voice activity gate                         */
+  /* -------------------------------------------- */
+
+  /**
+   * The voice activity gate on the microphone, while one runs (in Voice
+   * Activity mode).
+   */
+  get voiceGate(): VoiceActivityGate | undefined {
+    return (this.audioTrack?.getProcessor() as GatedProcessor | undefined)
+      ?.gate;
+  }
+
+  /**
+   * The voice activity gate's settings: the saved ones, or the ones being
+   * tried out.
+   */
+  getVoiceGateSettings(): VoiceGateSettings {
+    return (
+      this.voiceGatePreview ?? {
+        auto: game.settings?.get(MODULE_NAME, "audioAutoSensitivity") ?? true,
+        threshold:
+          game.settings?.get(MODULE_NAME, "audioNoiseGateThreshold") ?? -50,
+      }
+    );
+  }
+
+  /**
+   * Try out voice activity gate settings without saving them, e.g. while the
+   * settings window is open. Without settings, the saved ones apply again.
+   */
+  previewVoiceGate(settings?: VoiceGateSettings): void {
+    this.voiceGatePreview = settings;
+    this.applyVoiceGateSettings();
+  }
+
+  /**
+   * Send the current settings to every running gate, including the ones only
+   * measuring the level for a meter.
+   */
+  applyVoiceGateSettings(): void {
+    const settings = this.getVoiceGateSettings();
+    for (const gate of VoiceActivityGate.instances) {
+      gate.configure(settings);
+    }
+  }
+
+  /**
+   * Listen to the reports of the microphone's gate.
+   * @returns   A function that stops listening
+   */
+  onVoiceGateReports(listener: (report: VoiceGateReport) => void): () => void {
+    this.voiceGateListeners.add(listener);
+    return () => {
+      this.voiceGateListeners.delete(listener);
+    };
+  }
+
+  private readonly onVoiceGateReport = (report: VoiceGateReport) => {
+    for (const listener of this.voiceGateListeners) {
+      listener(report);
+    }
+    this.updateGateSpeaking();
+  };
+
+  /**
+   * While the gate runs, show the local user as speaking while it sends
+   * audio, so the speaking ring matches what others hear.
+   */
+  private updateGateSpeaking(): void {
+    const speaking =
+      !!this.voiceGate?.isOpen && !!this.audioTrack && !this.audioTrack.isMuted;
+    if (speaking !== this.gateSpeaking) {
+      this.gateSpeaking = speaking;
+      this.onIsSpeakingChanged(game.user?.id, speaking);
+    }
   }
 
   async initializeVideoTrack(): Promise<void> {
@@ -1575,9 +1547,15 @@ export default class LiveKitClient {
     }
     ui.notifications?.warn(disconnectWarning);
 
-    // Clear the participant map
+    // Clear the participant map. LiveKit tells nothing more about the other
+    // participants, so nobody is speaking any more.
     this.liveKitParticipants.clear();
     this.userAudioMixer.stopAll();
+    for (const userId of [...this.speakingUsers]) {
+      this.onIsSpeakingChanged(userId, false);
+    }
+    this.playersList.refresh();
+    this.dock?.refresh();
 
     // Set connection buttons state
     this.setConnectionButtons(false);
@@ -1603,14 +1581,26 @@ export default class LiveKitClient {
   }
 
   onIsSpeakingChanged(userId: string | undefined, speaking: boolean): void {
-    if (userId) {
+    if (!userId) {
+      return;
+    }
+    if (speaking) {
+      this.speakingUsers.add(userId);
+    } else {
+      this.speakingUsers.delete(userId);
+    }
+    const dock = this.dock;
+    if (dock) {
+      dock.setSpeaking(userId, speaking);
+    } else {
       // @ts-expect-error - ui.webrtc.setUserIsSpeaking is not in foundry-vtt-types yet
       // eslint-disable-next-line @typescript-eslint/no-unsafe-call
       ui.webrtc?.setUserIsSpeaking(userId, speaking);
       this.cameraViewDecorator.setSpeaking(userId, speaking);
-      if (userId === game.user?.id) {
-        this.voicePanelInstance?.setSpeaking(speaking);
-      }
+    }
+    this.playersList.setSpeaking(userId, speaking);
+    if (userId === game.user?.id) {
+      this.voicePanelInstance?.setSpeaking(speaking);
     }
   }
 
@@ -1655,6 +1645,7 @@ export default class LiveKitClient {
 
     // Set up remote participant callbacks
     this.setRemoteParticipantCallbacks(participant);
+    this.playersList.refresh(fvttUser.id);
 
     // Let the new participant know if we are deafened
     if (this.voiceControls.isDeafened()) {
@@ -1677,6 +1668,11 @@ export default class LiveKitClient {
     }
 
     this.liveKitParticipants.delete(fvttUserId);
+    for (const audioElement of this.getUserAudioElements(fvttUserId)) {
+      audioElement.remove();
+    }
+    this.onIsSpeakingChanged(fvttUserId, false);
+    this.playersList.refresh(fvttUserId);
 
     // Clear breakout room cache if user is leaving a breakout room
     if (
@@ -1794,6 +1790,8 @@ export default class LiveKitClient {
       return;
     }
 
+    // Foundry shows the mute state of users on its own A/V from their user
+    // activity; users on external A/V only report it to LiveKit
     if (useExternalAV) {
       if (publication.kind === Track.Kind.Audio) {
         this.avMaster.settings.handleUserActivity(fvttUserId, {
@@ -1804,22 +1802,6 @@ export default class LiveKitClient {
           hidden: publication.isMuted,
         });
       }
-    } else {
-      const userCameraView = document.querySelector(
-        `.camera-view[data-user="${fvttUserId}"]`,
-      );
-      if (userCameraView) {
-        let uiIndicator;
-        if (publication.kind === Track.Kind.Audio) {
-          uiIndicator = userCameraView.querySelector(".status-remote-muted");
-        } else if (publication.kind === Track.Kind.Video) {
-          uiIndicator = userCameraView.querySelector(".status-remote-hidden");
-        }
-
-        if (uiIndicator) {
-          uiIndicator.classList.toggle("hidden", !publication.isMuted);
-        }
-      }
     }
   }
 
@@ -1827,6 +1809,11 @@ export default class LiveKitClient {
     _cameraviews: foundry.applications.apps.av.CameraViews,
     html: HTMLElement,
   ): void {
+    // The Discord-style dock draws its own controls and decorations
+    if (this.dock) {
+      this.applyDiscordStyle();
+      return;
+    }
     this.decorateCameraViews(html);
 
     const userId = game.user?.id;
@@ -1875,37 +1862,25 @@ export default class LiveKitClient {
       return;
     }
 
-    const videoElement = document.querySelector(
-      `.camera-view[data-user="${fvttUserId}"]`,
-    );
-
-    if (!(videoElement instanceof HTMLVideoElement)) {
-      log.debug(
-        "videoElement not yet ready for",
-        fvttUserId,
-        "; skipping publication",
-        publication,
-      );
-      debounceRefreshView(fvttUserId);
-      return;
-    }
-
     if (track instanceof RemoteAudioTrack) {
-      // Get the audio element for the user
+      // Audio plays from elements of its own, which don't depend on the
+      // camera views
       const audioElement = this.getUserAudioElement(
         fvttUserId,
-        videoElement,
+        null,
         publication.source,
       );
-      if (audioElement) {
-        this.attachAudioTrack(fvttUserId, track, audioElement).catch(
-          (error: unknown) => {
-            log.error("Error attaching audio track:", error);
-          },
-        );
-      }
+      this.attachAudioTrack(fvttUserId, track, audioElement).catch(
+        (error: unknown) => {
+          log.error("Error attaching audio track:", error);
+        },
+      );
     } else if (track instanceof RemoteVideoTrack) {
-      this.attachVideoTrack(track, videoElement);
+      // The camera view may not be rendered yet; rendering attaches it then
+      const videoElement = this.getUserVideoElement(fvttUserId);
+      if (videoElement) {
+        this.attachVideoTrack(track, videoElement);
+      }
     } else {
       log.warn("Unknown track type subscribed from publication", publication);
     }
@@ -2046,15 +2021,16 @@ export default class LiveKitClient {
   }
 
   setConnectionButtons(connected: boolean): void {
-    const userCameraView = document.querySelector(
-      `.camera-view[data-user="${game.user?.id ?? ""}"]`,
+    // The buttons are in the dock's controls, next to the camera views
+    const userControls = document.querySelector(
+      `.user-controls[data-user="${game.user?.id ?? ""}"]`,
     );
 
-    if (userCameraView) {
-      const connectButton = userCameraView.querySelector(
+    if (userControls) {
+      const connectButton = userControls.querySelector(
         ".livekit-control.connect",
       );
-      const disconnectButton = userCameraView.querySelector(
+      const disconnectButton = userControls.querySelector(
         ".livekit-control.disconnect",
       );
 
@@ -2097,10 +2073,12 @@ export default class LiveKitClient {
 
   setLocalParticipantCallbacks(): void {
     this.liveKitRoom?.localParticipant
-      .on(
-        ParticipantEvent.IsSpeakingChanged,
-        this.onIsSpeakingChanged.bind(this, game.user?.id),
-      )
+      .on(ParticipantEvent.IsSpeakingChanged, (speaking: boolean) => {
+        // While the voice activity gate runs, it tells when we speak
+        if (!this.voiceGate) {
+          this.onIsSpeakingChanged(game.user?.id, speaking);
+        }
+      })
       .on(ParticipantEvent.ParticipantMetadataChanged, (...args) => {
         log.debug("Local ParticipantEvent ParticipantMetadataChanged:", args);
       })

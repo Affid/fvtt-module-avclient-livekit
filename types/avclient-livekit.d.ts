@@ -58,6 +58,15 @@ type LiveKitSettingsConfig = SettingConfig & {
 
 type BreakoutRoomRegistry = Record<string, string | undefined>;
 
+/** Whether the camera dock floats, and where */
+interface DockFloatingState {
+  floating: boolean;
+  left?: number;
+  top?: number;
+  width?: number;
+  height?: number;
+}
+
 /**
  * Global settings
  */
@@ -90,6 +99,20 @@ declare global {
       initial: string;
     }>;
     "avclient-livekit.voicePanelPosition": { left: number; top: number } | null;
+    "avclient-livekit.dockLayout": foundry.data.fields.StringField<{
+      required: true;
+      blank: false;
+      initial: string;
+      choices: Record<string, string>;
+    }>;
+    "avclient-livekit.dockFloating": DockFloatingState;
+    "avclient-livekit.dockFollowSpeaker": foundry.data.fields.BooleanField<{
+      initial: false;
+    }>;
+    "avclient-livekit.voicePanelInDock": foundry.data.fields.BooleanField<{
+      initial: true;
+    }>;
+    "avclient-livekit.userVideoHidden": Record<string, boolean | undefined>;
     "avclient-livekit.userVolumes": Record<string, number | undefined>;
     "avclient-livekit.userLocalMutes": Record<string, boolean | undefined>;
     "avclient-livekit.mutedByDeafen": foundry.data.fields.BooleanField<{
@@ -120,8 +143,8 @@ declare global {
     "avclient-livekit.audioNoiseSuppression": foundry.data.fields.BooleanField<{
       initial: true;
     }>;
-    "avclient-livekit.audioNoiseGate": foundry.data.fields.BooleanField<{
-      initial: false;
+    "avclient-livekit.audioAutoSensitivity": foundry.data.fields.BooleanField<{
+      initial: true;
     }>;
     "avclient-livekit.audioNoiseGateThreshold": foundry.data.fields.NumberField<{
       required: true;

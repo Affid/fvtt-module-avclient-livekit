@@ -1,18 +1,20 @@
 import type LiveKitClient from "../LiveKitClient";
 import { MODULE_NAME } from "../utils/constants";
 import { Logger } from "../utils/logger";
+import Popover from "./Popover";
+import { button } from "./buttons";
 import {
-  InputLevelMeter,
   getPushToTalkBindings,
   keybindRecorder,
   localize,
-  radioGroup,
+  segmentedControl,
   selectInput,
   setPushToTalkKey,
   settingRow,
   switchInput,
 } from "./controls";
-import { Popover, el } from "./dom";
+import { el, uniqueId } from "./dom";
+import { InputLevelMeter } from "./LevelMeter";
 
 const log = new Logger("AudioSettingsPopover");
 
@@ -25,6 +27,7 @@ const log = new Logger("AudioSettingsPopover");
 export default class AudioSettingsPopover {
   private readonly popover = new Popover("livekit-audio-settings", () => {
     this.meter?.stop();
+    this.client.previewVoiceGate();
   });
   private meter?: InputLevelMeter;
 
@@ -34,17 +37,24 @@ export default class AudioSettingsPopover {
     return this.popover.isOpen;
   }
 
-  toggle(anchor: HTMLElement): void {
+  /**
+   * @param anchor    The element to show the popover against
+   * @param control   The button that opened the popover, if not the anchor
+   */
+  toggle(anchor: HTMLElement, control: HTMLElement = anchor): void {
     if (this.popover.isOpen) {
       this.popover.close();
     } else {
-      void this.open(anchor);
+      void this.open(anchor, control);
     }
   }
 
-  async open(anchor: HTMLElement): Promise<void> {
+  async open(
+    anchor: HTMLElement,
+    control: HTMLElement = anchor,
+  ): Promise<void> {
     await this.render();
-    this.popover.openAt(anchor);
+    this.popover.openAt(anchor, control);
     this.meter?.start(this.client);
   }
 
@@ -59,34 +69,41 @@ export default class AudioSettingsPopover {
     const wasMetering = this.popover.isOpen;
     this.meter?.stop();
     const devices = await this.renderDevices();
+    const video = await this.renderVideo();
 
-    const advanced = el("button", {
-      className: "livekit-link-button",
-      text: localize("advancedSettings"),
-      attrs: { type: "button" },
-    });
-    advanced.addEventListener("click", () => {
-      this.close();
-      this.client.avMaster.config
-        .render({ force: true })
-        .catch((error: unknown) => {
-          log.error("Error opening the A/V settings:", error);
-        });
+    const advanced = button({
+      label: localize("advancedSettings"),
+      variant: "link",
+      onClick: () => {
+        this.close();
+        this.client.avMaster.config
+          .render({ force: true })
+          .catch((error: unknown) => {
+            log.error("Error opening the A/V settings:", error);
+          });
+      },
     });
 
-    this.popover.element.replaceChildren(
+    const titleId = uniqueId("title");
+    this.popover.element.setAttribute("aria-labelledby", titleId);
+    const sections = [
       el("h3", {
         className: "livekit-popover-title",
         text: localize("voiceSettings"),
+        attrs: { id: titleId },
       }),
       devices,
       this.renderInputMode(),
       this.renderSensitivity(),
       this.renderNoiseSuppression(),
+      video,
       el("footer", {
         className: "livekit-popover-footer",
         children: [advanced],
       }),
+    ];
+    this.popover.element.replaceChildren(
+      ...sections.filter((section) => section !== false),
     );
     this.popover.reposition();
     if (wasMetering) {
@@ -135,13 +152,51 @@ export default class AudioSettingsPopover {
     );
   }
 
+  /**
+   * The camera and receiving other users' video, when the world uses video.
+   */
+  private async renderVideo(): Promise<HTMLElement | false> {
+    if (!this.client.voiceControls.canUseCamera()) {
+      return false;
+    }
+    const sources = await this.client.liveKitAvClient.getVideoSources();
+    const current = this.client.settings.client.videoSrc;
+    return this.section(
+      localize("settingsSection.video"),
+      settingRow({
+        label: localize("videoSrc"),
+        control: selectInput({
+          label: localize("videoSrc"),
+          options: [
+            ...deviceOptions(sources, current).filter(
+              (option) => option.value !== "disabled",
+            ),
+            { value: "disabled", label: localize("deviceDisabled") },
+          ],
+          value: current,
+          onChange: (value) => {
+            this.client.settings.set("client", "videoSrc", value);
+          },
+        }),
+      }),
+      switchInput({
+        label: localize("receiveVideo"),
+        checked: !this.client.settings.client.disableVideo,
+        onChange: (checked) => {
+          this.client.settings.set("client", "disableVideo", !checked);
+        },
+      }),
+    );
+  }
+
   private renderInputMode(): HTMLElement {
     const mode = this.client.settings.client.voice.mode;
     const bindings = getPushToTalkBindings();
     return this.section(
       localize("inputMode"),
-      radioGroup({
+      segmentedControl({
         name: "livekit-voice-mode",
+        label: localize("inputMode"),
         value: mode,
         options: [
           { value: "always", label: localize("inputModeVoiceActivity") },
@@ -168,26 +223,33 @@ export default class AudioSettingsPopover {
     );
   }
 
-  private renderSensitivity(): HTMLElement {
-    const krispActive =
-      this.client.getAudioProcessingConfig().model === "krisp";
-    const enabled = game.settings?.get(MODULE_NAME, "audioNoiseGate") ?? false;
-    const threshold =
-      game.settings?.get(MODULE_NAME, "audioNoiseGateThreshold") ?? -50;
-
+  /**
+   * Input sensitivity, in Voice Activity mode only: automatic, or a threshold
+   * set on the level meter. Dragging the threshold tries it out on the
+   * microphone right away; letting go saves it.
+   */
+  private renderSensitivity(): HTMLElement | false {
+    if (this.client.settings.client.voice.mode !== "always") {
+      this.meter = undefined;
+      return false;
+    }
+    const settings = this.client.getVoiceGateSettings();
     const caption = el("span", {
       className: "livekit-meter-caption",
-      text: `${threshold.toString()} dB`,
+      text: `${settings.threshold.toString()} dB`,
     });
     this.meter = new InputLevelMeter({
-      threshold,
-      disabled: !enabled || krispActive,
-      onInput: (value) => {
-        caption.textContent = `${value.toString()} dB`;
+      settings,
+      onInput: (threshold) => {
+        caption.textContent = `${threshold.toString()} dB`;
+        this.client.previewVoiceGate({ auto: false, threshold });
       },
-      onChange: (value) => {
+      onChange: (threshold) => {
         game.settings
-          ?.set(MODULE_NAME, "audioNoiseGateThreshold", value)
+          ?.set(MODULE_NAME, "audioNoiseGateThreshold", threshold)
+          .then(() => {
+            this.client.previewVoiceGate();
+          })
           .catch((error: unknown) => {
             log.error("Error saving the input sensitivity:", error);
           });
@@ -197,38 +259,33 @@ export default class AudioSettingsPopover {
     return this.section(
       localize("inputSensitivity"),
       switchInput({
-        label: localize("inputSensitivityEnable"),
-        checked: enabled && !krispActive,
-        disabled: krispActive,
+        label: localize("audioAutoSensitivity"),
+        checked: settings.auto,
         onChange: (checked) => {
           void game.settings
-            ?.set(MODULE_NAME, "audioNoiseGate", checked)
+            ?.set(MODULE_NAME, "audioAutoSensitivity", checked)
             .then(() => this.render());
         },
       }),
       this.meter.element,
       el("p", {
         className: "livekit-setting-hint",
-        text: krispActive
-          ? localize("krispRefinementDisabled")
-          : localize("inputSensitivityHint"),
-        children: [!krispActive && caption],
+        text: localize(
+          settings.auto ? "inputSensitivityAutoHint" : "inputSensitivityHint",
+        ),
+        children: [!settings.auto && caption],
       }),
     );
   }
 
   private renderNoiseSuppression(): HTMLElement {
     const options = this.client.getNoiseModelOptions();
-    const krispActive =
-      this.client.getAudioProcessingConfig().model === "krisp";
     const settingToggle = (
       key: "audioEchoCancellation" | "audioAutoGainControl",
-      disabled: boolean,
     ) =>
       switchInput({
         label: localize(key),
-        checked: (game.settings?.get(MODULE_NAME, key) ?? false) && !disabled,
-        disabled,
+        checked: game.settings?.get(MODULE_NAME, key) ?? false,
         onChange: (checked) => {
           void game.settings
             ?.set(MODULE_NAME, key, checked)
@@ -251,8 +308,8 @@ export default class AudioSettingsPopover {
             });
         },
       }),
-      settingToggle("audioEchoCancellation", false),
-      settingToggle("audioAutoGainControl", krispActive),
+      settingToggle("audioEchoCancellation"),
+      settingToggle("audioAutoGainControl"),
     );
   }
 }

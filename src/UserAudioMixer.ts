@@ -93,19 +93,30 @@ export default class UserAudioMixer {
       return;
     }
 
+    // Users hidden from the camera dock (Foundry's "hide user") aren't heard
+    // either, as when their audio played from their camera view
     const muted =
-      this.client.voiceControls.isDeafened() || this.isLocallyMuted(userId);
+      this.client.voiceControls.isDeafened() ||
+      this.isLocallyMuted(userId) ||
+      this.client.settings.getUser(userId)?.blocked === true;
     const volume = this.getVolume(userId);
     const microphoneTrack = this.getMicrophoneTrack(userId);
     const boostTrack =
       !muted && volume > 1 && this.canBoost() ? microphoneTrack : undefined;
     const boost = !!boostTrack;
 
-    const audioElements =
-      document
-        .querySelector(`.camera-view[data-user="${userId}"]`)
-        ?.querySelectorAll("audio") ?? [];
+    const audioElements = this.client.getUserAudioElements(userId);
+    // The elements outlive renders, so follow output device changes here
+    // Browsers name the default device ""
+    const setting = this.client.settings.client.audioSink;
+    const sink = setting === "default" ? "" : setting;
+    const canPickSink = "setSinkId" in HTMLMediaElement.prototype;
     for (const audioElement of audioElements) {
+      if (canPickSink && audioElement.sinkId !== sink) {
+        audioElement.setSinkId(sink).catch((error: unknown) => {
+          log.warn("Unable to change the audio output device:", error);
+        });
+      }
       const isMicrophone = audioElement.classList.contains(
         `user-${Track.Source.Microphone}-audio`,
       );

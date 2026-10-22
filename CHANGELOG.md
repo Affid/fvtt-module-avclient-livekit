@@ -1,5 +1,66 @@
 # LiveKit A/V Client for FoundryVTT: Changelog
 
+## 0.6.8-krisp.9
+
+- A blue line shows the edge of the camera dock you can drag to resize it, when you hover over it and while you drag.
+- Fix resizing a dock at the left or right of the screen only working from its top corner; you can now drag anywhere along its edge.
+
+## 0.6.8-krisp.8
+
+- The voice panel now sits inside the camera dock by default, so the two take less room: at the bottom of a dock on the left or right, and beside the tiles in a dock at the top or bottom. Turn off "Voice panel in the dock" in the dock's layout menu, or under A/V Settings → Appearance, to keep it as a floating panel above the player list. When the dock is collapsed, the panel shrinks to its buttons.
+- Fix the collapsed camera dock at the top or bottom of the screen not shrinking to a slim bar.
+
+## 0.6.8-krisp.7
+
+- The voice panel is the one place for your voice controls: it gains a camera button, and the voice settings gain a Video section (camera, and whether to show other users' video, which replaces Foundry's "disable receiving video" button).
+- Click the connection status in the voice panel for connection details: ping, quality, server and region, audio codec, packet loss, jitter, noise cancellation and input sensitivity, with a Reconnect button.
+- The player list shows a green ring around the color of whoever is speaking, and icons for users who are muted or deafened.
+- Changing the audio output device moves everyone's voice to it right away.
+- Fix speaking rings staying on after disconnecting or reconnecting.
+- Fix the camera button refusing to turn your camera off when the GM had blocked your video.
+- Audio-only worlds no longer show camera badges and buttons on the camera dock.
+
+## 0.6.8-krisp.6
+
+- A Discord-style camera dock replaces Foundry's when the Discord-style interface is on (switching the interface now reloads Foundry):
+  - Each user's tile shows their video, or their avatar while their camera is off, a green ring while they speak, their name, and badges when they are muted, deafened, muted by you, or have their camera off. Hover a tile for its connection quality.
+  - Layouts: a grid; one user in focus with the others in a strip (click a tile to focus it, or let the focus follow whoever speaks); or a compact list of avatars like a Discord voice channel.
+  - Dock it on any side of the screen and resize it from its inner edge, or let it float, dragged by its header and resized by its corner. Collapse it to a slim bar of avatars. All from the button in the dock's header, and remembered on your computer.
+  - Hover your own tile to mute yourself or turn your camera on or off.
+  - Right-click (or Shift+F10 on) another user's tile: volume up to 200%, mute for me, hide video for me, focus, pop out into a window of its own, picture-in-picture, and hide from the dock. The GM can also block a user's audio or video and use the breakout rooms from there.
+  - Foundry's dock position and width, collapsing, nameplates, player color borders, popped out and hidden users still apply.
+  - The A/V Settings window has a "Discord-style dock" group: layout, follow the speaker, and floating.
+- Other users' audio no longer stops when their camera view re-renders, is hidden, or moves; it plays from elements of its own. Users hidden from the dock are not heard, as before.
+- Audio and video from users who join start playing as soon as they arrive, rather than after the next re-render of the dock.
+
+## 0.6.8-krisp.5
+
+- Input sensitivity like Discord. In Voice Activity mode your microphone is only sent while you speak:
+  - "Automatically determine input sensitivity" (on by default) learns the level of your background noise within a moment and sends audio that is clearly louder. It keeps up with a noisier or quieter room, without rising while you talk.
+  - Turn it off to set the threshold yourself on the level meter.
+  - The level meter shows what is being judged and turns green while your voice is being sent. It also works while you are muted.
+  - It works after noise cancellation (including Krisp), so it judges your voice rather than the noise.
+  - The speaking ring around your avatar now shows exactly when you are being sent.
+  - Changes in the A/V Settings window are heard right away and undone if you close the window without saving.
+  - The Input Sensitivity settings only show in Voice Activity mode; with push to talk, the key decides.
+- The push to talk release delay is a slider from 0 to 2000 ms.
+- Auto gain control can now be used with Krisp.
+- Fix Krisp turning itself off, and sending your microphone unfiltered, after the microphone restarted (for example when changing the input device).
+- Fix the level meter staying empty while muted or using push to talk.
+- If input sensitivity can't start, noise cancellation keeps running without it.
+- The old "Silence sounds below the threshold" switch is gone; your threshold is kept for manual sensitivity.
+
+## 0.6.8-krisp.4
+
+- The Discord-style interface now looks and behaves as one app: the voice panel, voice settings, noise suppression menu, user volume menu, camera views and the A/V Settings window share the same colors, buttons, switches, sliders, menus and tooltips.
+- Menus work with the keyboard: arrow keys, Home and End move between items, Escape closes the menu and returns to the button that opened it. Every control has a visible focus ring and a label for screen readers.
+- Voice settings: choose Voice Activity or Push to Talk with a two-way switch.
+- The A/V Settings window keeps its dark look with Foundry's light theme; its section list is aligned and no longer outlined in orange.
+- Fixes for Foundry v13 and v14:
+  - The camera dock's connect/disconnect toggle shows the right state (it showed "Connect" while connected).
+  - With the Discord-style interface, a camera view shows the user's round avatar whenever their video is hidden, and the speaking ring and mute/deafen badges replace Foundry's border and red icons.
+  - Turning your camera back on shows it in your camera view again.
+
 ## 0.6.8-krisp.3
 
 - Fix all of the module's text showing as raw keys (e.g. `LIVEKITAVCLIENT.voiceSettings`): the English language file failed to load.
