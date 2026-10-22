@@ -33,7 +33,10 @@ A Foundry VTT (v14+) voice and video system made of modules:
   Cloud, Jitsi's built-in effects) come with their service module.
 - **Theme modules** that change how the dock and voice panel look, e.g.
   `modular-av-ui-scifi`, `modular-av-ui-fantasy`, a Discord-like one
-  (`modular-av-ui-dis` or similar). The core ships one clean default theme;
+  (`modular-av-ui-dis` or similar). Beyond restyling the dock, a theme can
+  bring the call into the game: e.g. each camera in its own ornate frame
+  (vine leaves, carved wood, a scrying mirror) in a different corner of the
+  screen rather than in a dock. The core ships one clean default theme;
   each player picks a theme, with a default set by the GM.
 
 And everything is **light and robust**: it recovers from lost connections by
@@ -220,33 +223,70 @@ interface VideoEffect {
 }
 ```
 
-### Themes
+### Themes and layouts
 
-Themes restyle the core's UI; they don't replace its behaviour, so every
-theme stays accessible and keeps working when the core changes. That only
-holds if the core treats its look as a **public, versioned API**:
+Themes restyle and rearrange the core's UI; they don't replace its
+behaviour, so every theme stays accessible, shows the true state, and keeps
+working when the core changes. Two things are kept apart, because players
+will want to mix them (a fantasy look in a plain dock, or the default look
+in free-floating frames):
+
+- **Layouts** decide where the cameras are. The core ships the dock layouts
+  (left, right, top, bottom, floating, own window) and a **scattered**
+  layout: every camera is its own element, anchored to a corner or edge of
+  the screen (or dragged anywhere), with its position and size saved per
+  player, and per scene when the GM wants (a portrait by each side of a
+  tavern table). More layouts can be registered with `api.registerLayout`,
+  but tile fitting, drag, resize and keeping tiles on screen stay in the
+  core.
+- **Themes** decide how everything looks: the dock, tiles, voice panel and
+  popovers, in any layout.
+
+What a theme can use, all part of the core's **public, versioned API**:
 
 - **Design tokens**: every colour, radius, spacing, font, shadow, the
   speaking ring and tile frame are CSS custom properties on the dock and
   panel roots (as the fork's `--lk-*` tokens, renamed e.g. `--mav-*`). A
-  theme mostly sets tokens.
+  simple theme only sets tokens.
 - **Stable hooks for structure**: documented class names and data
-  attributes for each part (`.mav-dock`, `.mav-tile`, `.mav-tile-ring`,
-  `.mav-panel`, `[data-state="speaking"]`, `[data-placement="left"]`, …), so
-  a theme can add decoration (frames, textures, ornaments) with its own CSS
-  without depending on internal markup. Changing these is a breaking API
-  change (major `api.version`).
-- **Optional slots** for themes that need more than CSS: e.g. an extra
-  element per tile for an ornamental frame, or a custom speaking animation,
-  offered by the core rather than by themes reaching into the DOM.
+  attributes for each part (`.mav-dock`, `.mav-tile`, `.mav-tile-video`,
+  `.mav-tile-frame`, `.mav-panel`, `[data-state="speaking"]`,
+  `[data-muted]`, `[data-layout="scattered"]`, `[data-anchor="top-left"]`,
+  …), so a theme can add decoration with its own CSS without depending on
+  internal markup. Changing these is a breaking API change (major
+  `api.version`).
+- **Tile frames**: a theme can give each tile a frame that is bigger than
+  the video, e.g. vine leaves overflowing its edges. It declares the frame
+  rather than drawing it with scripts: artwork (SVG or a 9-slice image for
+  `border-image`, so it scales to any tile size), how far it reaches past
+  the video on each side (so the core's fitting and on-screen clamping
+  allow for it), an optional shape for the video (oval, arch, shield, via
+  `mask-image`/`clip-path`), and variants per anchor (leaves growing from
+  the corner the tile sits in) or per state (leaves glowing while speaking,
+  greying while muted). Frames never take clicks (`pointer-events: none`)
+  except where the core puts its controls.
+- **Optional slots** for anything more: extra elements per tile or in the
+  panel that the core creates on request, rather than themes reaching into
+  the DOM.
 - A theme registers with `api.registerTheme({ id, label, stylesheet,
-preview })`; the core loads only the selected theme's stylesheet, and
-  scopes it to its UI (not to the rest of Foundry). The Picture-in-Picture
-  dock window gets the same stylesheet.
-- Rules the core checks or documents for theme authors: text contrast
-  (WCAG AA), visible focus rings, `prefers-reduced-motion`, no layout changes
-  that break tile fitting (themes may style sizes through tokens the
-  fitting logic reads).
+frames, preview, suggestedLayout })`; the core loads only the selected
+  theme's stylesheet and assets, and scopes them to its UI (not the rest
+  of Foundry). The Picture-in-Picture dock window gets them too.
+
+Rules the core enforces or documents for theme authors:
+
+- The core always shows **mute, deafen, speaking and connection state**,
+  and the player's name on hover, in every theme; a theme may restyle these
+  indicators but not hide them.
+- Faces stay visible: a frame may cover at most a set margin of the video,
+  and video shapes keep the centre of the picture.
+- Text contrast (WCAG AA) and visible focus rings; controls stay reachable
+  by keyboard in the scattered layout too.
+- Cheap to run: static artwork, animations only on `transform` and
+  `opacity`, no per-frame scripts, everything off under
+  `prefers-reduced-motion`.
+- Scattered tiles must not cover Foundry's own controls (sidebar, scene
+  controls, hotbar, chat); the core keeps them clear of those.
 
 ### Testing per module
 
@@ -259,8 +299,10 @@ preview })`; the core loads only the selected theme's stylesheet, and
   leaving on purpose.
 - Effect modules have their own tests (output track runs, CPU budget, fail
   closed) and are exercised with the mock provider.
-- Theme modules get screenshot tests of the dock and panel in each layout
-  and state with the mock provider, and automated contrast checks.
+- Theme modules get screenshot tests of the dock, scattered tiles and
+  panel in each layout, anchor and state with the mock provider, automated
+  contrast checks, and a check that frames leave faces and the state
+  indicators visible.
 - Each package has its own CI job; the core's job runs the mock-provider UI
   tests in Foundry.
 
@@ -325,7 +367,8 @@ preview })`; the core loads only the selected theme's stylesheet, and
 │  mic → audio effects → voice gate → provider                 │
 │  camera → video effects → provider                           │
 ├──────────────────────────────────────────────────────────────┤
-│ Plugin registry: providers, audio effects, video effects     │
+│ Plugin registry: providers, audio and video effects,         │
+│  layouts, themes                                             │
 └──────────────────────────────────────────────────────────────┘
 ```
 
@@ -534,7 +577,8 @@ Not worth carrying: the classic-UI paths (Foundry's own dock decorated), the
 6. `modular-av-p2p` (plain WebRTC, no server) — proves the provider API with a
    very different service.
 7. `modular-av-jitsi` (lib-jitsi-meet), then `modular-av-embed`.
-8. A first theme module, to prove the theming API (tokens, hooks, slots).
+8. The scattered layout, then a first theme module with tile frames (e.g.
+   vine leaves), to prove the layout and theming API.
 9. Docs, a migration note for players of the old module, releases per module.
 
 Performance budgets to hold (measure in the harness, GPU Chrome): no long task
