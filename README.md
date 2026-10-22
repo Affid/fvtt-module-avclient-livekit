@@ -118,7 +118,8 @@ It also replaces Foundry's camera dock with its own:
 - Three layouts: a grid, one user in focus with the others in a strip (click a
   tile to focus it, or let the focus follow whoever speaks), and a compact list
   of avatars like a Discord voice channel.
-- Dock it on any side of the screen or let it float (drag it by its header,
+- Dock it on any side of the screen and resize it by dragging its inner edge
+  (a blue line shows it on hover), or let it float (drag it by its header,
   resize it by its corner), and collapse it to a slim bar of avatars. Change
   this from the button in the dock's header.
 - Hover your own tile to mute yourself or turn your camera on or off.

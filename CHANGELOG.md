@@ -1,5 +1,10 @@
 # LiveKit A/V Client for FoundryVTT: Changelog
 
+## 0.6.8-krisp.9
+
+- A blue line shows the edge of the camera dock you can drag to resize it, when you hover over it and while you drag.
+- Fix resizing a dock at the left or right of the screen only working from its top corner; you can now drag anywhere along its edge.
+
 ## 0.6.8-krisp.8
 
 - The voice panel now sits inside the camera dock by default, so the two take less room: at the bottom of a dock on the left or right, and beside the tiles in a dock at the top or bottom. Turn off "Voice panel in the dock" in the dock's layout menu, or under A/V Settings → Appearance, to keep it as a floating panel above the player list. When the dock is collapsed, the panel shrinks to its buttons.
