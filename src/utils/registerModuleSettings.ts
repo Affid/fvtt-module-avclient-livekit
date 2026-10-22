@@ -142,6 +142,24 @@ export default function registerModuleSettings(): void {
     },
   });
 
+  // What is done with the background of the camera video
+  game.settings?.register(MODULE_NAME, "videoBackground", {
+    scope: "client",
+    config: false,
+    default: "none",
+    type: new foundry.data.fields.StringField({
+      required: true,
+      blank: false,
+      initial: "none",
+      choices: { none: "none", blur: "blur" },
+    }),
+    onChange: () => {
+      void game.webrtc?.client._liveKitClient.updateVideoBackground({
+        retry: true,
+      });
+    },
+  });
+
   // Users whose video is hidden just for this client, keyed by user ID
   game.settings?.register(MODULE_NAME, "userVideoHidden", {
     scope: "client",

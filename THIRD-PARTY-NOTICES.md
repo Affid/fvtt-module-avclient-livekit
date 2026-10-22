@@ -1,8 +1,9 @@
 # Third-Party Notices
 
-This module bundles the following third-party open-source components for the
-client-side enhanced noise cancellation feature. Each is used under a permissive
-license; their copyright and license notices are reproduced below.
+This module bundles the following third-party components for the client-side
+noise cancellation and camera background features. The open-source ones are
+used under permissive licenses; their copyright and license notices are
+reproduced below.
 
 ## @sapphi-red/web-noise-suppressor
 
@@ -36,6 +37,33 @@ the noise suppression models in the browser. It bundles the following models:
 The vendored assets are served locally from this module under
 `public/rnnoise/`, `public/speex/`, and `public/gtcrn/`; nothing is fetched from
 a third-party CDN at runtime.
+
+## @livekit/track-processors
+
+- License: Apache-2.0
+- Copyright LiveKit, Inc.
+- https://github.com/livekit/track-processors-js
+
+Blurs or replaces the background of your camera video. It is bundled as a
+separate, lazily loaded chunk (`video-background-*.js`), and uses:
+
+### MediaPipe Tasks Vision
+
+- License: Apache-2.0
+- Copyright Google LLC
+- https://github.com/google-ai-edge/mediapipe (npm: `@mediapipe/tasks-vision`)
+
+Its WebAssembly runtime is served from this module under `mediapipe/`.
+
+### MediaPipe Selfie Segmentation model
+
+- License: Apache-2.0
+- Copyright Google LLC
+- https://storage.googleapis.com/mediapipe-assets/Model%20Card%20MediaPipe%20Selfie%20Segmentation.pdf
+
+Finds the person in each camera frame. Vendored as
+`public/mediapipe/selfie_segmenter.tflite` (float16, version 1); nothing is
+fetched from a third-party CDN at runtime.
 
 ## @livekit/krisp-noise-filter
 

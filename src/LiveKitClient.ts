@@ -49,6 +49,11 @@ import VoiceActivityGate, {
   type VoiceGateSettings,
 } from "./VoiceActivityGate";
 import { LANG_NAME, MODULE_NAME } from "./utils/constants";
+import {
+  applyVideoBackground,
+  supportsVideoBackground,
+  type VideoBackgroundMode,
+} from "./VideoBackground";
 import LiveKitAVClient from "./LiveKitAVClient";
 import {
   LiveKitServerType,
@@ -171,6 +176,9 @@ export default class LiveKitClient {
   screenTracks: LocalTrack[] = [];
   useExternalAV = false;
   videoTrack: LocalVideoTrack | null = null;
+  /** The camera background effect failed to start; video is sent without it */
+  videoBackgroundFailed = false;
+  private videoBackgroundQueue: Promise<void> = Promise.resolve();
   windowClickListener: EventListener | null = null;
 
   liveKitServerTypes: LiveKitServerTypes = {
@@ -1423,6 +1431,62 @@ export default class LiveKitClient {
     ) {
       await this.videoTrack.mute();
     }
+
+    // The background effect loads in the background rather than holding up
+    // the camera; LiveKit swaps in the processed video once it runs
+    if (this.videoTrack) {
+      void this.updateVideoBackground();
+    }
+  }
+
+  /**
+   * The camera background effect to use: the setting, unless this browser
+   * can't run it or it failed to start.
+   */
+  getVideoBackgroundMode(): VideoBackgroundMode {
+    const mode = game.settings?.get(MODULE_NAME, "videoBackground");
+    if (
+      mode !== "blur" ||
+      this.videoBackgroundFailed ||
+      !supportsVideoBackground()
+    ) {
+      return "none";
+    }
+    return mode;
+  }
+
+  /**
+   * Put the camera background effect from the settings on the camera track.
+   * Calls run one after another, so quick changes apply in order.
+   *
+   * @param retry   Try again after the effect failed, e.g. because it was
+   *                picked again
+   */
+  updateVideoBackground({ retry = false } = {}): Promise<void> {
+    this.videoBackgroundQueue = this.videoBackgroundQueue.then(async () => {
+      if (retry) {
+        this.videoBackgroundFailed = false;
+      }
+      const track = this.videoTrack;
+      if (!track) {
+        return;
+      }
+      const mode = this.getVideoBackgroundMode();
+      try {
+        await applyVideoBackground(track, mode);
+        log.info("Camera background applied:", mode);
+      } catch (error: unknown) {
+        log.error("Error applying the camera background", mode, error);
+        this.videoBackgroundFailed = true;
+        await track.stopProcessor().catch((stopError: unknown) => {
+          log.warn("Error removing the camera background:", stopError);
+        });
+        ui.notifications?.warn(`${LANG_NAME}.videoBackgroundFailed`, {
+          localize: true,
+        });
+      }
+    });
+    return this.videoBackgroundQueue;
   }
 
   initializeRoom(): void {

@@ -24,6 +24,7 @@ import { deviceOptions, noiseModelOptions } from "./ui/AudioSettingsPopover";
 import { button } from "./ui/buttons";
 import { el, icon, surface } from "./ui/dom";
 import { InputLevelMeter } from "./ui/LevelMeter";
+import { videoBackgroundRow } from "./ui/videoBackgroundControl";
 import { LiveKitConnectionSettings } from "../types/avclient-livekit";
 
 const log = new Logger("LiveKitAVConfig");
@@ -660,6 +661,13 @@ export default class LiveKitAVConfig
             ],
             value: client.videoSrc,
           }),
+        }),
+      ),
+      this.group(
+        localize("videoEffects"),
+        videoBackgroundRow({
+          name: `${MODULE_NAME}.videoBackground`,
+          failed: this.liveKitClient?.videoBackgroundFailed,
         }),
       ),
       this.group(localize("videoReceiving"), this.clientSwitch("disableVideo")),
