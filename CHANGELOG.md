@@ -1,5 +1,12 @@
 # LiveKit A/V Client for FoundryVTT: Changelog
 
+## 0.6.8-krisp.10
+
+- The grid sizes its tiles to the space the dock has and the number of people in it, like Discord: as large as fits, in as many columns as works best. Tiles only scroll once they would get smaller than 120 pixels.
+- In the focus layout, the user in focus is the largest 16:9 tile that fits, shows their whole video rather than cropping it, and sits together with the strip of the others. In a dock at the top or bottom of the screen, the others are in two rows of half height, so the user in focus is larger.
+- The voice panel in a dock at the top or bottom of the screen is a narrower column that uses the dock's height, and leaves out your name and then the ping line when the dock is short.
+- Fix the sidebar's chat log showing over a dock on the right side of the screen.
+
 ## 0.6.8-krisp.9
 
 - A blue line shows the edge of the camera dock you can drag to resize it, when you hover over it and while you drag.
