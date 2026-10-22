@@ -1,8 +1,8 @@
-# Release files for v0.6.8-krisp.6
+# Release files for v0.6.8-krisp.7
 
 This branch only holds the assets for a manual GitHub release. It contains no
 source code and no workflows. The source is on the branch
-`claude/brave-clarke-86e4rg` (commit 128ba3b).
+`claude/brave-clarke-86e4rg` (commit 7f2d763).
 
 | File          | Upload as release asset named |
 | ------------- | ----------------------------- |
@@ -12,8 +12,8 @@ source code and no workflows. The source is on the branch
 Create the release at
 <https://github.com/Affid/fvtt-module-avclient-livekit/releases/new>:
 
-1. Tag: `v0.6.8-krisp.6` (create new tag on publish).
-2. Title: `v0.6.8-krisp.6`.
+1. Tag: `v0.6.8-krisp.7` (create new tag on publish).
+2. Title: `v0.6.8-krisp.7`.
 3. Attach `module.zip` and `module.json` from this branch.
 4. Leave "Set as a pre-release" unchecked and keep "Set as the latest
    release" checked, so the manifest URL
