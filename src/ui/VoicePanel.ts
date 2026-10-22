@@ -34,6 +34,7 @@ export default class VoicePanel {
   });
   private readonly muteButton: HTMLButtonElement;
   private readonly deafenButton: HTMLButtonElement;
+  private readonly cameraButton: HTMLButtonElement;
   private readonly noiseButton: HTMLButtonElement;
   private readonly settingsButton: HTMLButtonElement;
   private pingMs: number | undefined;
@@ -62,6 +63,13 @@ export default class VoicePanel {
         this.client.voiceControls.toggleDeafen();
       },
     });
+    this.cameraButton = iconButton({
+      icon: "fa-video",
+      label: localize("cameraOff"),
+      onClick: () => {
+        this.client.voiceControls.toggleCamera();
+      },
+    });
     // The menus open above the panel rather than over it
     this.noiseButton = iconButton({
       icon: "fa-wand-magic-sparkles",
@@ -83,21 +91,25 @@ export default class VoicePanel {
     });
     this.settingsButton.setAttribute("aria-haspopup", "dialog");
 
+    // The status opens the connection details
+    const statusButton = el("button", {
+      className: "livekit-panel-status-info",
+      title: localize("connectionDetails"),
+      attrs: { type: "button", "aria-haspopup": "dialog" },
+      children: [
+        el("span", {
+          className: "livekit-panel-status-line",
+          children: [this.statusIcon, this.statusText],
+        }),
+        this.subtext,
+      ],
+    });
+    statusButton.addEventListener("click", () => {
+      this.client.connectionPopover.toggle(this.element, statusButton);
+    });
     const statusRow = el("div", {
       className: "livekit-panel-status",
-      children: [
-        el("div", {
-          className: "livekit-panel-status-info",
-          children: [
-            el("div", {
-              className: "livekit-panel-status-line",
-              children: [this.statusIcon, this.statusText],
-            }),
-            this.subtext,
-          ],
-        }),
-        this.connectionButton,
-      ],
+      children: [statusButton, this.connectionButton],
     });
     this.makeDraggable(statusRow);
 
@@ -124,6 +136,7 @@ export default class VoicePanel {
                 children: [
                   this.muteButton,
                   this.deafenButton,
+                  this.cameraButton,
                   this.noiseButton,
                   this.settingsButton,
                 ],
@@ -245,6 +258,15 @@ export default class VoicePanel {
       pressed: deafened,
     });
     setIconButtonState(this.noiseButton, { active: !!runningModel });
+
+    const cameraOff = voice.isCameraOff();
+    this.cameraButton.hidden = !voice.canUseCamera();
+    setIconButtonState(this.cameraButton, {
+      icon: cameraOff ? "fa-video-slash" : "fa-video",
+      label: localize(cameraOff ? "cameraOn" : "cameraOff"),
+      off: cameraOff,
+      pressed: cameraOff,
+    });
   }
 
   setSpeaking(speaking: boolean): void {
@@ -275,9 +297,7 @@ export default class VoicePanel {
     }
     const measure = async () => {
       try {
-        const stats = await this.client.audioTrack?.getSenderStats();
-        const rtt = stats?.roundTripTime;
-        const pingMs = rtt !== undefined ? Math.round(rtt * 1000) : undefined;
+        const pingMs = await this.client.getPingMs();
         if (pingMs !== this.pingMs) {
           this.pingMs = pingMs;
           this.update();

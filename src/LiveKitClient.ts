@@ -64,6 +64,8 @@ import UserAudioMixer from "./UserAudioMixer";
 import AudioSettingsPopover from "./ui/AudioSettingsPopover";
 import CameraViewDecorator from "./ui/CameraViewDecorator";
 import NoiseModelMenu from "./ui/NoiseModelMenu";
+import ConnectionPopover from "./ui/ConnectionPopover";
+import PlayersListDecorator from "./ui/PlayersListDecorator";
 import UserMenu from "./ui/UserMenu";
 import LiveKitCameraViews from "./ui/dock/LiveKitCameraViews";
 import VoicePanel from "./ui/VoicePanel";
@@ -158,6 +160,8 @@ export default class LiveKitClient {
   readonly userMenu = new UserMenu(this);
   readonly audioSettingsPopover = new AudioSettingsPopover(this);
   readonly noiseModelMenu = new NoiseModelMenu(this);
+  readonly connectionPopover = new ConnectionPopover(this);
+  readonly playersList = new PlayersListDecorator(this);
   private voicePanelInstance?: VoicePanel;
   breakoutRoom: string | undefined;
   connectionState: ConnectionState = ConnectionState.Disconnected;
@@ -540,7 +544,9 @@ export default class LiveKitClient {
     if (!enabled) {
       this.userMenu.close();
       this.audioSettingsPopover.close();
+      this.connectionPopover.close();
     }
+    this.playersList.refresh();
     this.voicePanel.sync();
     this.cameraViewDecorator.refreshAll();
   }
@@ -557,6 +563,7 @@ export default class LiveKitClient {
       this.userAudioMixer.applyAll();
       this.cameraViewDecorator.refreshAll();
     }
+    this.playersList.refresh(userId);
     this.dock?.refresh();
     this.voicePanelInstance?.update();
   }
@@ -588,6 +595,33 @@ export default class LiveKitClient {
       Track.Source.Microphone,
     );
     return !publication || publication.isMuted;
+  }
+
+  /**
+   * The round trip time to the server, in milliseconds, from the statistics
+   * of the microphone, or of the camera while the microphone sends nothing
+   * (e.g. with push to talk).
+   */
+  async getPingMs(): Promise<number | undefined> {
+    const audio = await this.audioTrack?.getSenderStats();
+    let rtt = audio?.roundTripTime;
+    if (rtt === undefined) {
+      const video = await this.videoTrack?.getSenderStats();
+      rtt = video?.find(
+        (layer) => layer.roundTripTime !== undefined,
+      )?.roundTripTime;
+    }
+    return rtt === undefined ? undefined : Math.round(rtt * 1000);
+  }
+
+  /**
+   * The codec the microphone is sent with, e.g. "opus".
+   */
+  getAudioCodec(): string | undefined {
+    return this.audioTrack?.sender
+      ?.getParameters()
+      .codecs.at(0)
+      ?.mimeType.replace(/^audio\//, "");
   }
 
   /**
@@ -1558,6 +1592,7 @@ export default class LiveKitClient {
       ui.webrtc?.setUserIsSpeaking(userId, speaking);
       this.cameraViewDecorator.setSpeaking(userId, speaking);
     }
+    this.playersList.setSpeaking(userId, speaking);
     if (userId === game.user?.id) {
       this.voicePanelInstance?.setSpeaking(speaking);
     }
@@ -1604,6 +1639,7 @@ export default class LiveKitClient {
 
     // Set up remote participant callbacks
     this.setRemoteParticipantCallbacks(participant);
+    this.playersList.refresh(fvttUser.id);
 
     // Let the new participant know if we are deafened
     if (this.voiceControls.isDeafened()) {
@@ -1630,6 +1666,7 @@ export default class LiveKitClient {
       audioElement.remove();
     }
     this.onIsSpeakingChanged(fvttUserId, false);
+    this.playersList.refresh(fvttUserId);
 
     // Clear breakout room cache if user is leaving a breakout room
     if (

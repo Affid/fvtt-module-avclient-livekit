@@ -75,6 +75,11 @@ Hooks.on("ready", () => {
   });
 });
 
+// Show voice state in the player list
+Hooks.on("renderPlayers", (_players: unknown, html: HTMLElement) => {
+  game.webrtc?.client._liveKitClient.playersList.decorate(html);
+});
+
 // Add context options on getUserContextOptions
 Hooks.on("getUserContextOptions", (playersApp, contextOptions) => {
   // If the WebRTC client is available, call its method to add context options

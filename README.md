@@ -91,11 +91,18 @@ See [CHANGELOG](/CHANGELOG.md)
 
 ## Discord-style interface
 
-By default, the module adds a Discord-style voice panel above the player list:
-connection status and ping, a disconnect button, and buttons to mute, deafen,
+By default, the module adds a Discord-style voice panel above the player list,
+the one place for your voice controls: connection status and ping, a
+disconnect button, and buttons to mute, deafen, turn your camera on or off,
 choose the noise cancellation model, and open the voice settings (devices,
-voice activity or push to talk, input sensitivity with a live level meter).
-Drag the panel by its status row to move it.
+voice activity or push to talk, input sensitivity with a live level meter,
+camera, and whether to show other users' video). Click the connection status
+for details (ping, quality, server and region, codec, packet loss, noise
+cancellation and input sensitivity) and to reconnect. Drag the panel by its
+status row to move it.
+
+The player list shows who is speaking with a green ring around their color,
+and whether they are muted or deafened.
 
 It also replaces Foundry's camera dock with its own:
 

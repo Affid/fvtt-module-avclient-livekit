@@ -69,6 +69,7 @@ export default class AudioSettingsPopover {
     const wasMetering = this.popover.isOpen;
     this.meter?.stop();
     const devices = await this.renderDevices();
+    const video = await this.renderVideo();
 
     const advanced = button({
       label: localize("advancedSettings"),
@@ -95,6 +96,7 @@ export default class AudioSettingsPopover {
       this.renderInputMode(),
       this.renderSensitivity(),
       this.renderNoiseSuppression(),
+      video,
       el("footer", {
         className: "livekit-popover-footer",
         children: [advanced],
@@ -147,6 +149,43 @@ export default class AudioSettingsPopover {
       localize("devices"),
       deviceSelect("audioSrc", sources),
       canPickOutput && deviceSelect("audioSink", sinks),
+    );
+  }
+
+  /**
+   * The camera and receiving other users' video, when the world uses video.
+   */
+  private async renderVideo(): Promise<HTMLElement | false> {
+    if (!this.client.voiceControls.canUseCamera()) {
+      return false;
+    }
+    const sources = await this.client.liveKitAvClient.getVideoSources();
+    const current = this.client.settings.client.videoSrc;
+    return this.section(
+      localize("settingsSection.video"),
+      settingRow({
+        label: localize("videoSrc"),
+        control: selectInput({
+          label: localize("videoSrc"),
+          options: [
+            ...deviceOptions(sources, current).filter(
+              (option) => option.value !== "disabled",
+            ),
+            { value: "disabled", label: localize("deviceDisabled") },
+          ],
+          value: current,
+          onChange: (value) => {
+            this.client.settings.set("client", "videoSrc", value);
+          },
+        }),
+      }),
+      switchInput({
+        label: localize("receiveVideo"),
+        checked: !this.client.settings.client.disableVideo,
+        onChange: (checked) => {
+          this.client.settings.set("client", "disableVideo", !checked);
+        },
+      }),
     );
   }
 

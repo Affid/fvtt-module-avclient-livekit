@@ -1061,7 +1061,7 @@
   box-sizing: border-box;
   position: fixed;
   z-index: 100;
-  width: 280px;
+  width: 300px;
   overflow: hidden;
   border-radius: var(--lk-radius-md);
   background: var(--lk-color-bg-secondary-alt);
@@ -1090,6 +1090,33 @@
   flex: 1;
   flex-direction: column;
   min-width: 0;
+}
+
+/* The status is a button that opens the connection details */
+.livekit-panel-status-info {
+  align-items: stretch;
+  width: auto;
+  height: auto;
+  margin: 0;
+  padding: var(--lk-space-1) var(--lk-space-2);
+  border: none;
+  border-radius: var(--lk-radius-sm);
+  background: none;
+  box-shadow: none;
+  color: inherit;
+  font-size: inherit;
+  line-height: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.livekit-panel-status-info:hover {
+  background: var(--lk-color-bg-hover);
+  box-shadow: none;
+}
+
+.livekit-panel-status-info:hover .livekit-panel-status-text {
+  text-decoration: underline;
 }
 
 .livekit-panel-status-line {
@@ -1180,6 +1207,67 @@
 
 .livekit-settings-section > .livekit-segmented {
   margin-bottom: var(--lk-space-4);
+}
+
+/* -------------------------------------------- */
+/*  Connection details                          */
+/* -------------------------------------------- */
+
+.livekit-connection-details {
+  width: 300px;
+}
+
+.livekit-details {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--lk-space-3) var(--lk-space-6);
+  margin: 0;
+  padding: var(--lk-space-4) var(--lk-space-2);
+  border-top: 1px solid var(--lk-color-border);
+}
+
+.livekit-details dt {
+  color: var(--lk-color-text-muted);
+  font-size: var(--lk-font-size-sm);
+  font-weight: var(--lk-font-weight-bold);
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.livekit-details dd {
+  margin: 0;
+  color: var(--lk-color-text);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+  text-align: right;
+}
+
+/* -------------------------------------------- */
+/*  Player list                                 */
+/* -------------------------------------------- */
+
+.livekit-discord-ui #players .player.livekit-speaking::before {
+  box-shadow:
+    0 0 0 2px var(--lk-color-bg-tertiary),
+    0 0 0 3px var(--lk-color-green);
+}
+
+.livekit-player-status {
+  display: flex;
+  gap: var(--lk-space-1);
+  margin-left: auto;
+}
+
+.livekit-player-status:empty {
+  display: none;
+}
+
+.livekit-player-status .livekit-badge {
+  --lk-slash-gap: transparent;
+  width: 16px;
+  height: 16px;
+  background: none;
+  font-size: 11px;
 }
 
 /* -------------------------------------------- */
