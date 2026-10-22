@@ -91,15 +91,20 @@ See [CHANGELOG](/CHANGELOG.md)
 
 ## Discord-style interface
 
-By default, the module adds a Discord-style voice panel above the player list,
-the one place for your voice controls: connection status and ping, a
-disconnect button, and buttons to mute, deafen, turn your camera on or off,
-choose the noise cancellation model, and open the voice settings (devices,
-voice activity or push to talk, input sensitivity with a live level meter,
-camera, and whether to show other users' video). Click the connection status
-for details (ping, quality, server and region, codec, packet loss, noise
-cancellation and input sensitivity) and to reconnect. Drag the panel by its
-status row to move it.
+By default, the module adds a Discord-style voice panel, the one place for
+your voice controls: connection status and ping, a disconnect button, and
+buttons to mute, deafen, turn your camera on or off, choose the noise
+cancellation model, and open the voice settings (devices, voice activity or
+push to talk, input sensitivity with a live level meter, camera, and whether to
+show other users' video). Click the connection status for details (ping,
+quality, server and region, codec, packet loss, noise cancellation and input
+sensitivity) and to reconnect.
+
+The panel sits at the bottom of the camera dock, or beside the tiles when the
+dock is at the top or bottom of the screen. Turn off "Voice panel in the dock"
+in the dock's layout menu or under A/V Settings → Appearance to make it a
+floating panel above the player list instead; drag it by its status row to
+move it.
 
 The player list shows who is speaking with a green ring around their color,
 and whether they are muted or deafened.

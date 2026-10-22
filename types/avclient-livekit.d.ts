@@ -109,6 +109,9 @@ declare global {
     "avclient-livekit.dockFollowSpeaker": foundry.data.fields.BooleanField<{
       initial: false;
     }>;
+    "avclient-livekit.voicePanelInDock": foundry.data.fields.BooleanField<{
+      initial: true;
+    }>;
     "avclient-livekit.userVideoHidden": Record<string, boolean | undefined>;
     "avclient-livekit.userVolumes": Record<string, number | undefined>;
     "avclient-livekit.userLocalMutes": Record<string, boolean | undefined>;

@@ -94,6 +94,8 @@ export default class LiveKitCameraViews extends CameraViews {
     className: "livekit-dock-list",
     attrs: { role: "list" },
   });
+  /** Where the voice panel goes when it is in the dock */
+  readonly panelSlot = el("div", { className: "livekit-dock-panel" });
   private readonly resizeHandle = el("div", {
     className: "livekit-resize-handle",
     attrs: { "aria-hidden": "true" },
@@ -229,8 +231,9 @@ export default class LiveKitCameraViews extends CameraViews {
     await super._onRender(context, options);
     this.place();
     this.attachMedia();
-    // The player list moves with the dock, and the voice panel with it
-    this.client?.voicePanelIfCreated?.reposition();
+    // The voice panel may live in the dock, or float above the player list,
+    // which moves with the dock
+    this.client?.voicePanelIfCreated?.sync();
   }
 
   /** @override */
@@ -314,6 +317,7 @@ export default class LiveKitCameraViews extends CameraViews {
         className: "livekit-dock-body",
         children: [this.stage, this.list],
       }),
+      this.panelSlot,
       this.resizeHandle,
     );
   }
@@ -619,6 +623,19 @@ export default class LiveKitCameraViews extends CameraViews {
   };
 
   /**
+   * Whether the voice panel goes in the dock: when asked to and the dock
+   * shows (it hides when every user is popped out).
+   */
+  canHostPanel(): boolean {
+    return (
+      this.rendered &&
+      this.built &&
+      !this.element.hidden &&
+      (game.settings?.get(MODULE_NAME, "voicePanelInDock") ?? true)
+    );
+  }
+
+  /**
    * Show a user large, in the focus layout.
    */
   focus(userId: string): void {
@@ -731,6 +748,17 @@ export default class LiveKitCameraViews extends CameraViews {
             MODULE_NAME,
             "dockFollowSpeaker",
             !(game.settings.get(MODULE_NAME, "dockFollowSpeaker") ?? false),
+          ),
+      },
+      {
+        type: "checkbox",
+        label: localize("voicePanelInDock"),
+        checked: game.settings?.get(MODULE_NAME, "voicePanelInDock") ?? true,
+        onSelect: () =>
+          game.settings?.set(
+            MODULE_NAME,
+            "voicePanelInDock",
+            !(game.settings.get(MODULE_NAME, "voicePanelInDock") ?? true),
           ),
       },
       { type: "separator" },

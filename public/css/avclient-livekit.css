@@ -1980,8 +1980,8 @@
   width: 56px;
 }
 
-.livekit-dock.is-collapsed.horizontal {
-  height: 56px;
+#camera-views.livekit-dock.is-collapsed.horizontal {
+  height: auto;
 }
 
 .livekit-dock.is-collapsed.is-floating {
@@ -2157,4 +2157,87 @@
 
 .livekit-tile-window .livekit-tile {
   border-radius: 0;
+}
+
+/* The voice panel in the dock, like Discord's user panel */
+.livekit-dock-panel {
+  flex: none;
+  border-top: 1px solid var(--lk-color-border);
+}
+
+.livekit-dock-panel:empty {
+  display: none;
+}
+
+.livekit-voice-panel.is-docked {
+  position: static;
+  width: auto;
+  border-radius: 0;
+  box-shadow: none;
+  container-type: inline-size;
+}
+
+.livekit-voice-panel.is-docked .livekit-panel-status {
+  cursor: default;
+}
+
+/* A narrow panel puts its buttons on a row of their own */
+@container (max-width: 279px) {
+  .livekit-voice-panel .livekit-panel-user {
+    flex-wrap: wrap;
+  }
+
+  .livekit-voice-panel .livekit-panel-buttons {
+    justify-content: space-between;
+    width: 100%;
+  }
+}
+
+/* On the top or bottom, the panel is a column on the right */
+#camera-views.livekit-dock.horizontal {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.livekit-dock.horizontal > .livekit-dock-header {
+  grid-column: 1 / -1;
+}
+
+.livekit-dock.horizontal > .livekit-dock-body {
+  grid-row: 2;
+  grid-column: 1;
+}
+
+.livekit-dock.horizontal > .livekit-dock-panel {
+  grid-row: 2;
+  grid-column: 2;
+  width: 300px;
+  overflow: auto;
+  border-top: none;
+  border-left: 1px solid var(--lk-color-border);
+}
+
+/* In the slim bar, only the buttons */
+.livekit-dock.is-collapsed
+  .livekit-voice-panel.is-docked
+  :is(.livekit-panel-status, .livekit-panel-avatar, .livekit-panel-user-info) {
+  display: none;
+}
+
+.livekit-dock.is-collapsed .livekit-voice-panel.is-docked .livekit-panel-user {
+  justify-content: center;
+  padding: var(--lk-space-2);
+}
+
+.livekit-dock.is-collapsed.vertical:not(.is-floating)
+  .livekit-voice-panel.is-docked
+  :is(.livekit-panel-user, .livekit-panel-buttons) {
+  flex-direction: column;
+  align-items: center;
+}
+
+/* The panel's size can't follow its buttons (it is a size container) */
+.livekit-dock.is-collapsed.horizontal > .livekit-dock-panel {
+  width: 184px;
 }

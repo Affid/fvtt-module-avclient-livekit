@@ -61,6 +61,8 @@
   "LIVEKITAVCLIENT.dockFloating": "Floating",
   "LIVEKITAVCLIENT.dockFloatingSetting": "Floating dock",
   "LIVEKITAVCLIENT.dockFloatingSettingHint": "Move the dock by its header and resize it by its corner, instead of docking it on a side of the screen.",
+  "LIVEKITAVCLIENT.voicePanelInDock": "Voice panel in the dock",
+  "LIVEKITAVCLIENT.voicePanelInDockHint": "Show your voice controls at the bottom of the camera dock instead of as a floating panel.",
   "LIVEKITAVCLIENT.appearanceDiscordDock": "Discord-style dock",
   "LIVEKITAVCLIENT.dockFocusUser": "Focus",
   "LIVEKITAVCLIENT.popOut": "Pop Out",

@@ -395,6 +395,7 @@ export default class LiveKitAVConfig
       | "audioMusicMode"
       | "audioAutoSensitivity"
       | "dockFollowSpeaker"
+      | "voicePanelInDock"
       | "discordStyleUI"
       | "displayConnectionQuality"
       | "useExternalAV"
@@ -733,6 +734,10 @@ export default class LiveKitAVConfig
           this.moduleSwitch("dockFollowSpeaker", {
             label: localize("dockFollowSpeaker"),
             hint: localize("dockFollowSpeakerHint"),
+          }),
+          this.moduleSwitch("voicePanelInDock", {
+            label: localize("voicePanelInDock"),
+            hint: localize("voicePanelInDockHint"),
           }),
           switchInput({
             name: `${MODULE_NAME}.dockFloating.floating`,

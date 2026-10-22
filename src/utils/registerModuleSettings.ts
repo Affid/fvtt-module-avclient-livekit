@@ -130,6 +130,18 @@ export default function registerModuleSettings(): void {
     },
   });
 
+  // Show the voice panel at the bottom of the Discord-style dock instead of
+  // floating, like the user panel at the bottom of Discord's channel list
+  game.settings?.register(MODULE_NAME, "voicePanelInDock", {
+    scope: "client",
+    config: false,
+    default: true,
+    type: new foundry.data.fields.BooleanField({ initial: true }),
+    onChange: () => {
+      game.webrtc?.client._liveKitClient.voicePanelIfCreated?.sync();
+    },
+  });
+
   // Users whose video is hidden just for this client, keyed by user ID
   game.settings?.register(MODULE_NAME, "userVideoHidden", {
     scope: "client",

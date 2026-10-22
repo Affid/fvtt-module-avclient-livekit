@@ -1,5 +1,10 @@
 # LiveKit A/V Client for FoundryVTT: Changelog
 
+## 0.6.8-krisp.8
+
+- The voice panel now sits inside the camera dock by default, so the two take less room: at the bottom of a dock on the left or right, and beside the tiles in a dock at the top or bottom. Turn off "Voice panel in the dock" in the dock's layout menu, or under A/V Settings → Appearance, to keep it as a floating panel above the player list. When the dock is collapsed, the panel shrinks to its buttons.
+- Fix the collapsed camera dock at the top or bottom of the screen not shrinking to a slim bar.
+
 ## 0.6.8-krisp.7
 
 - The voice panel is the one place for your voice controls: it gains a camera button, and the voice settings gain a Video section (camera, and whether to show other users' video, which replaces Foundry's "disable receiving video" button).

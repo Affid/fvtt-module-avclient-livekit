@@ -160,15 +160,35 @@ export default class VoicePanel {
       this.client.settings.get("world", "mode") !==
         foundry.av.AVSettings.AV_MODES.DISABLED;
 
-    if (visible && !this.element.isConnected) {
+    // In the dock, or floating above the player list
+    const dock = this.client.dock;
+    const docked = visible && !!dock?.canHostPanel();
+    if (!visible) {
+      if (this.element.isConnected) {
+        this.element.remove();
+        window.removeEventListener("resize", this.onResize);
+      }
+    } else if (docked && dock) {
+      if (this.element.parentElement !== dock.panelSlot) {
+        dock.panelSlot.append(this.element);
+        this.element.style.removeProperty("left");
+        this.element.style.removeProperty("top");
+      }
+    } else if (this.element.parentElement !== document.body) {
       document.body.append(this.element);
+      this.element.classList.remove("is-docked");
       this.position();
+    }
+    this.element.classList.toggle("is-docked", docked);
+    if (visible) {
       window.addEventListener("resize", this.onResize);
-    } else if (!visible && this.element.isConnected) {
-      this.element.remove();
-      window.removeEventListener("resize", this.onResize);
     }
     this.update();
+  }
+
+  /** The panel is in the camera dock */
+  private get docked(): boolean {
+    return this.element.classList.contains("is-docked");
   }
 
   /**
@@ -323,6 +343,9 @@ export default class VoicePanel {
    * Place the panel at its saved position, or above Foundry's player list.
    */
   private position(): void {
+    if (this.docked) {
+      return;
+    }
     const saved = game.settings?.get(MODULE_NAME, "voicePanelPosition");
     const { width, height } = this.element.getBoundingClientRect();
     let left: number;
@@ -344,16 +367,6 @@ export default class VoicePanel {
     this.element.style.top = `${clamp(top, MARGIN, window.innerHeight - height - MARGIN).toString()}px`;
   }
 
-  /**
-   * Place the panel again, e.g. after the camera dock moved, which moves the
-   * player list.
-   */
-  reposition(): void {
-    if (this.element.isConnected) {
-      this.position();
-    }
-  }
-
   private readonly onResize = () => {
     this.position();
   };
@@ -367,6 +380,7 @@ export default class VoicePanel {
     handle.addEventListener("pointerdown", (event) => {
       const target = event.target as Element;
       if (
+        this.docked ||
         event.button !== 0 ||
         target.closest("button:not(.livekit-panel-status-info)")
       ) {
