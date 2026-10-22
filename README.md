@@ -100,8 +100,8 @@ show other users' video). Click the connection status for details (ping,
 quality, server and region, codec, packet loss, noise cancellation and input
 sensitivity) and to reconnect.
 
-The panel sits at the bottom of the camera dock, or beside the tiles when the
-dock is at the top or bottom of the screen. Turn off "Voice panel in the dock"
+The panel sits at the bottom of the camera dock, or in a column beside the
+tiles when the dock is at the top or bottom of the screen. Turn off "Voice panel in the dock"
 in the dock's layout menu or under A/V Settings → Appearance to make it a
 floating panel above the player list instead; drag it by its status row to
 move it.
@@ -115,9 +115,9 @@ It also replaces Foundry's camera dock with its own:
   off, a green ring while they speak, and badges when they are muted,
   deafened, muted by you, or have their camera off. Hover a tile for its
   connection quality.
-- Three layouts: a grid, one user in focus with the others in a strip (click a
-  tile to focus it, or let the focus follow whoever speaks), and a compact list
-  of avatars like a Discord voice channel.
+- Three layouts: a grid whose tiles grow to fill the dock, one user in focus
+  with the others in a strip (click a tile to focus it, or let the focus follow
+  whoever speaks), and a compact list of avatars like a Discord voice channel.
 - Dock it on any side of the screen and resize it by dragging its inner edge
   (a blue line shows it on hover), or let it float (drag it by its header,
   resize it by its corner), and collapse it to a slim bar of avatars. Change

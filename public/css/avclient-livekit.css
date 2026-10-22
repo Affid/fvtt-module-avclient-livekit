@@ -1694,8 +1694,13 @@
   align-items: center;
   justify-content: center;
   min-width: 0;
-  min-height: 0;
+  min-height: min(50%, 100cqw * 9 / 16);
   container-type: size;
+}
+
+.livekit-dock.horizontal[data-layout="focus"] .livekit-dock-stage {
+  min-width: min(50%, 100cqh * 16 / 9);
+  min-height: 0;
 }
 
 .livekit-dock.horizontal[data-layout="focus"] .livekit-dock-stage {
@@ -1712,7 +1717,9 @@
 
 .livekit-dock[data-layout="focus"] .livekit-dock-list {
   display: flex;
-  flex: none;
+  flex: 0 1 auto;
+  min-width: 0;
+  min-height: 0;
   overflow: auto;
 }
 
@@ -1720,6 +1727,16 @@
   .livekit-dock-list {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
+}
+
+/* A floating dock's strip is a row that scrolls sideways; the user in focus
+   gives way to it */
+.livekit-dock.is-floating[data-layout="focus"] .livekit-dock-stage {
+  min-height: 0;
+}
+
+.livekit-dock.is-floating[data-layout="focus"] .livekit-dock-list {
+  flex: none;
 }
 
 .livekit-dock.is-floating[data-layout="focus"]
@@ -1734,13 +1751,16 @@
 .livekit-dock.horizontal[data-layout="focus"] .livekit-dock-list {
   display: grid;
   grid-template-rows: repeat(2, max-content);
+  grid-template-columns: none;
+  grid-auto-columns: calc((100cqh - var(--lk-space-4)) / 2 * 16 / 9);
   grid-auto-flow: column;
   align-content: center;
   height: 100%;
 }
 
 .livekit-dock.horizontal[data-layout="focus"] .livekit-dock-list .livekit-tile {
-  height: calc((100cqh - var(--lk-space-4)) / 2);
+  width: calc((100cqh - var(--lk-space-4)) / 2 * 16 / 9);
+  height: auto;
 }
 
 /* Tiles */
