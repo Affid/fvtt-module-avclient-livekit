@@ -13,12 +13,22 @@ it fully before writing code.
 
 A Foundry VTT (v14+) voice and video system made of modules:
 
-- **`modular-av`** ("Modular AV"), the core: lean and well tested. It owns
-  the Foundry integration and the whole user experience — a Discord-like
-  camera dock, a voice panel (mute, deafen, connection status, settings),
-  speaking rings, per-player volume, push to talk / voice activity with input
-  sensitivity, the settings window — and the session logic (connecting,
-  recovering from lost connections, who is who, mute/deafen state).
+- **`modular-av`** ("Modular AV"), the core: a **headless foundation**,
+  as small as it can be while doing everything that more than one module
+  would otherwise have to write. It owns the Foundry integration, the
+  session (connecting, recovering from lost connections, who is who, the
+  true mute/deafen state), the local media pipeline, audio playback, and
+  the **extension points** every other module plugs into: a state and
+  commands API, media attachment, and declared UI contributions. It has
+  **no look of its own**: with only the core and a service module
+  installed, Foundry's own camera views and settings menus work, so the
+  core can be tested and used without any custom UI.
+- **UI modules** that give it a face, built on the core's API rather than
+  inside it: `modular-av-ui-dock`, the Discord-like camera dock, voice
+  panel and settings window (the recommended one, what the fork's UI
+  becomes), and later others that show cameras in quite different ways,
+  e.g. each camera in its own ornate frame in a corner of the screen, or on
+  the player's token.
 - **Service modules**, one per communication service, each installed only if
   wanted and tested on its own: `modular-av-livekit` (self-hosted LiveKit and
   LiveKit Cloud), `modular-av-jitsi`, a peer-to-peer one using plain WebRTC
@@ -31,13 +41,12 @@ A Foundry VTT (v14+) voice and video system made of modules:
   local tracks before they are handed to the service, so they work with any
   service that accepts tracks. Service-specific extras (Krisp on LiveKit
   Cloud, Jitsi's built-in effects) come with their service module.
-- **Theme modules** that change how the dock and voice panel look, e.g.
-  `modular-av-ui-scifi`, `modular-av-ui-fantasy`, a Discord-like one
-  (`modular-av-ui-dis` or similar). Beyond restyling the dock, a theme can
-  bring the call into the game: e.g. each camera in its own ornate frame
-  (vine leaves, carved wood, a scrying mirror) in a different corner of the
-  screen rather than in a dock. The core ships one clean default theme;
-  each player picks a theme, with a default set by the GM.
+- **Theme modules** that change how a UI module looks, e.g.
+  `modular-av-ui-scifi`, `modular-av-ui-fantasy` (the Discord-like look is
+  `ui-dock`'s default, so a `ui-dis` theme only if a closer copy is
+  wanted): restyling the dock, or bringing the call
+  into the game, e.g. each camera in a frame of vine leaves, carved wood or
+  a scrying mirror. Each player picks a theme, with a default set by the GM.
 
 And everything is **light and robust**: it recovers from lost connections by
 itself, never shows a state it isn't in (muted, blurred), and costs little
@@ -106,16 +115,19 @@ package per Foundry module, released independently:
 ```
 modular-av/
   packages/
-    core/            → Foundry module "modular-av"
+    api/             → types only: the plugin API, shared by all packages
+    core/            → Foundry module "modular-av" (headless, no look)
+    kit/             → a library, not a Foundry module: UI building blocks
+                       that UI modules bundle (see "What goes where")
+    ui-dock/         → "modular-av-ui-dock" (dock, voice panel, settings window)
+    ui-scifi/        → "modular-av-ui-scifi" (theme for ui-dock)
+    ui-fantasy/      → "modular-av-ui-fantasy" (theme for ui-dock)
     livekit/         → "modular-av-livekit"
     p2p/             → "modular-av-p2p"   (plain WebRTC, no server)
     jitsi/           → "modular-av-jitsi"
     embed/           → "modular-av-embed" (iframe services)
     fx-noise/        → "modular-av-fx-noise" (RNNoise/Speex/GTCRN, gate stays in core)
     fx-background/   → "modular-av-fx-background" (blur/replace, MediaPipe)
-    ui-scifi/        → "modular-av-ui-scifi" (theme)
-    ui-fantasy/      → "modular-av-ui-fantasy" (theme)
-    api/             → types only: the plugin API, shared by all packages
     testing/         → mock provider, contract tests, Playwright harness
   docs/
 ```
@@ -127,6 +139,34 @@ e.g. `livekit-v1.2.0`; each module has its own `module.json` and release
 zip). Separate repositories per module are possible later if others maintain
 them.
 
+### What goes where
+
+The rule that keeps the core lean without anyone rewriting anything:
+
+- **If it has a look, it goes in a UI module** (markup, CSS, layout,
+  wording of the UI).
+- **If two modules would need it and it has no look, it goes in the core**
+  (state, rules, media, Foundry plumbing) **or in `kit`** (UI behaviour
+  without a look: tile fitting, drag and resize, keeping things on screen,
+  popover and menu positioning that works in the Picture-in-Picture window,
+  the Picture-in-Picture window itself, focus handling, the `el()` DOM
+  helper, level meters). `kit` is a library UI modules bundle (only what
+  they use), so it costs the core nothing and nobody writes a popover
+  twice.
+- **If it is heavy, optional or service-specific, it is a plugin.**
+- **Guarantees live in the core, not in a UI**: mute in every state,
+  fail-closed camera effects, "open mic" when the gate can't run, the GM's
+  blocks, reconnecting. No UI module or theme can break them, because none
+  of them implements them.
+
+So the core contains: the Foundry A/V client class (Foundry's single
+plug-in point), the session state machine and reconnect policy, the local
+media pipeline (devices, effect chain, voice gate, push to talk, single
+`AudioContext`), **audio playback** (per-player volume, deafen, output
+device — calls must be heard even with no UI module), settings storage,
+keybindings, the GM's socket commands, the plugin registry, and the
+extension points below. It contains no dock, panel, settings window or CSS.
+
 ### How modules plug in
 
 - Each plugin module declares the core in its `module.json`:
@@ -137,16 +177,24 @@ them.
   load order of modules doesn't matter:
   `Hooks.callAll("modularAV.register", api)`. Plugins register there:
   `api.registerProvider(...)`, `api.registerAudioEffect(...)`,
-  `api.registerVideoEffect(...)`, `api.registerTheme(...)`. A plugin checks `api.version` and declines
-  (with a clear message) if it is incompatible.
+  `api.registerVideoEffect(...)`, `api.registerSurface(...)`,
+  `api.contribute(...)`. A plugin checks `api.version` and declines (with a
+  clear message) if it is incompatible. UI modules expose their own,
+  separately versioned API for their themes (e.g. `ui-dock`'s
+  `registerTheme`, `registerLayout`).
+- `module.json` of the core **recommends** (`relationships.recommends`)
+  `modular-av-ui-dock` and `modular-av-livekit`, so a new user is offered a
+  working set.
 - Foundry allows one A/V client class: the core sets it and delegates to the
   provider the GM chose. With no provider module installed, the core says so
   in its settings window.
-- **Plugins describe their settings; the core renders them** with its UI kit,
-  so every module looks and behaves the same (server address and keys for a
-  provider, strength for an effect). Plugins may get small custom sections,
-  built with the core's exported UI kit (`api.ui`), when a schema isn't
-  enough.
+- **Plugins describe their settings and controls; they never draw them.**
+  The core registers each settings schema as plain Foundry settings (so
+  they work with no UI module), and the active UI module renders the same
+  schemas in its own settings window, in its own style. Likewise for quick
+  controls, participant actions and indicators (see "Extension points"), so
+  installing an effect module adds its toggle to whatever UI the player
+  uses, in that UI's look.
 - **Heavy code is loaded lazily inside each plugin** (dynamic `import()`):
   installing an effect module costs nothing until a player turns it on.
 - A provider's own bundled library (e.g. `livekit-client`) lives only in its
@@ -223,26 +271,96 @@ interface VideoEffect {
 }
 ```
 
-### Themes and layouts
+### Extension points ("plug-holes")
 
-Themes restyle and rearrange the core's UI; they don't replace its
+What a UI module builds on, and what other modules plug into. All of it is
+the core's public, versioned API, tested against the mock provider:
+
+- **State**: one observable store with everything a UI shows —
+  the session (status, reconnect attempt and next try, final reason),
+  participants (Foundry user, name, avatar, colour, audio and video
+  present, speaking, muted, deafened, volume, connection quality), the
+  local player (input mode, gate open, mic level only while asked for,
+  each effect's state: off, starting, running, failed), devices, and the
+  provider's capabilities. Subscribe with a selector; changes are batched
+  (once per animation frame) so a UI never re-renders per event.
+- **Commands**: everything a UI can do, as calls that return when done or
+  throw a localized error — mute, deafen, set a player's volume, input mode
+  and sensitivity, choose devices, turn effects on and off, leave, rejoin,
+  reconnect now, GM actions. A UI never touches the provider or tracks.
+- **Media attachment**: `api.media.attach(participantId, "video",
+element)` puts a participant's video in any element (in Foundry's window
+  or the Picture-in-Picture window) and returns a detach function. The core
+  tracks whether the element is visible and tells the provider, so hidden
+  videos stop downloading whatever the UI does. Audio is never attached by
+  UIs: the core plays it.
+- **Surfaces**: places a UI module can fill — `cameras` (where videos are
+  shown), `controls` (mute, deafen, status), `settings` (the settings
+  window), `players` (decorations on Foundry's player list). A UI module
+  registers what it provides with `api.registerSurface`; each player
+  chooses per surface among those installed (defaulting to the GM's
+  choice), and an unfilled surface falls back to Foundry's own UI. So one
+  module can show cameras on tokens while another provides the voice
+  panel.
+- **Contributions**: small declared items any module adds and every UI
+  renders in its own style: settings sections (schemas), **quick controls**
+  (e.g. fx-background's "Blur" toggle with a strength slider, fx-noise's
+  model picker), **participant actions** (menu items, e.g. "Mute for me",
+  GM "Block video"), **indicators** (badges per participant, e.g. "blur
+  on", "Krisp"), and **status rows** (e.g. the provider's codec and server
+  region in connection details). Each declares an id, label, icon,
+  where it applies, a state selector and a command. A custom render
+  function is allowed for the rare case a declaration can't express, and
+  discouraged.
+- **A UI contract**: what every UI module must show (mute, deafen,
+  speaking, connection state, "open mic", an effect that failed) — checked
+  by a shared test suite in `packages/testing` that every UI module runs,
+  like the provider contract tests.
+
+```ts
+interface ModularAV {
+  version: string;
+  state: Store<AVState>; // get(), subscribe(selector, listener)
+  actions: AVActions; // setMuted, setDeafened, setVolume, setEffect…
+  media: {
+    attach(id: ParticipantId, kind: "video", el: HTMLVideoElement): () => void;
+  };
+  registerProvider(plugin: ProviderPlugin): void;
+  registerAudioEffect(plugin: AudioEffectPlugin): void;
+  registerVideoEffect(plugin: VideoEffectPlugin): void;
+  registerSurface(surface: SurfacePlugin): void; // cameras, controls, settings, players
+  contribute(item: Contribution): void; // settings, control, action, indicator, status
+}
+```
+
+The embed provider (an iframe with its own media UI) declares a
+capability so the `cameras` surface hosts its element instead of videos.
+
+### `modular-av-ui-dock`: themes and layouts
+
+`ui-dock` is the Discord-like UI: it fills all four surfaces, built with
+`kit`. Its themes and layouts are `ui-dock`'s own API (versioned with it),
+not the core's — another UI module may offer theming differently, or not
+at all.
+
+Themes restyle and rearrange the dock's UI; they don't replace its
 behaviour, so every theme stays accessible, shows the true state, and keeps
 working when the core changes. Two things are kept apart, because players
 will want to mix them (a fantasy look in a plain dock, or the default look
 in free-floating frames):
 
-- **Layouts** decide where the cameras are. The core ships the dock layouts
+- **Layouts** decide where the cameras are. `ui-dock` ships the dock layouts
   (left, right, top, bottom, floating, own window) and a **scattered**
   layout: every camera is its own element, anchored to a corner or edge of
   the screen (or dragged anywhere), with its position and size saved per
   player, and per scene when the GM wants (a portrait by each side of a
-  tavern table). More layouts can be registered with `api.registerLayout`,
-  but tile fitting, drag, resize and keeping tiles on screen stay in the
-  core.
+  tavern table). More layouts can be registered with its
+  `registerLayout`, but tile fitting, drag, resize and keeping tiles on
+  screen stay in `ui-dock` and `kit`.
 - **Themes** decide how everything looks: the dock, tiles, voice panel and
   popovers, in any layout.
 
-What a theme can use, all part of the core's **public, versioned API**:
+What a theme can use, all part of `ui-dock`'s **public, versioned API**:
 
 - **Design tokens**: every colour, radius, spacing, font, shadow, the
   speaking ring and tile frame are CSS custom properties on the dock and
@@ -253,29 +371,29 @@ What a theme can use, all part of the core's **public, versioned API**:
   `.mav-tile-frame`, `.mav-panel`, `[data-state="speaking"]`,
   `[data-muted]`, `[data-layout="scattered"]`, `[data-anchor="top-left"]`,
   …), so a theme can add decoration with its own CSS without depending on
-  internal markup. Changing these is a breaking API change (major
-  `api.version`).
+  internal markup. Changing these is a breaking change (a major version of
+  `ui-dock`).
 - **Tile frames**: a theme can give each tile a frame that is bigger than
   the video, e.g. vine leaves overflowing its edges. It declares the frame
   rather than drawing it with scripts: artwork (SVG or a 9-slice image for
   `border-image`, so it scales to any tile size), how far it reaches past
-  the video on each side (so the core's fitting and on-screen clamping
+  the video on each side (so the fitting and on-screen clamping
   allow for it), an optional shape for the video (oval, arch, shield, via
   `mask-image`/`clip-path`), and variants per anchor (leaves growing from
   the corner the tile sits in) or per state (leaves glowing while speaking,
   greying while muted). Frames never take clicks (`pointer-events: none`)
-  except where the core puts its controls.
+  except where `ui-dock` puts its controls.
 - **Optional slots** for anything more: extra elements per tile or in the
-  panel that the core creates on request, rather than themes reaching into
+  panel that `ui-dock` creates on request, rather than themes reaching into
   the DOM.
-- A theme registers with `api.registerTheme({ id, label, stylesheet,
-frames, preview, suggestedLayout })`; the core loads only the selected
+- A theme registers with `ui-dock`'s `registerTheme({ id, label,
+stylesheet, frames, preview, suggestedLayout })`; it loads only the selected
   theme's stylesheet and assets, and scopes them to its UI (not the rest
   of Foundry). The Picture-in-Picture dock window gets them too.
 
-Rules the core enforces or documents for theme authors:
+Rules `ui-dock` enforces or documents for theme authors:
 
-- The core always shows **mute, deafen, speaking and connection state**,
+- `ui-dock` always shows (as the UI contract requires) **mute, deafen, speaking and connection state**,
   and the player's name on hover, in every theme; a theme may restyle these
   indicators but not hide them.
 - Faces stay visible: a frame may cover at most a set margin of the video,
@@ -286,25 +404,31 @@ Rules the core enforces or documents for theme authors:
   `opacity`, no per-frame scripts, everything off under
   `prefers-reduced-motion`.
 - Scattered tiles must not cover Foundry's own controls (sidebar, scene
-  controls, hotbar, chat); the core keeps them clear of those.
+  controls, hotbar, chat); `ui-dock` keeps them clear of those.
 
 ### Testing per module
 
 - `packages/testing` has a **mock provider** (in-memory participants, fake
-  tracks, scripted drops and reconnects) so the core and its UI are tested
-  without any server.
+  tracks, scripted drops and reconnects) so the core and every UI module
+  are tested without any server. The core's own tests need no UI at all:
+  they drive commands and assert on the state store and on Foundry's own
+  camera views.
 - A **provider contract test suite** that every provider module must pass
   against its real server in Docker: connect, publish, subscribe, mute in
   every state, speaking, a 20 s outage and recovery, duplicate identity,
   leaving on purpose.
 - Effect modules have their own tests (output track runs, CPU budget, fail
   closed) and are exercised with the mock provider.
+- A **UI contract test suite** every UI module passes with the mock
+  provider: each required state is visible, every command is reachable by
+  mouse and keyboard, contributions from a sample plugin render, nothing
+  breaks in the Picture-in-Picture window.
 - Theme modules get screenshot tests of the dock, scattered tiles and
   panel in each layout, anchor and state with the mock provider, automated
   contrast checks, and a check that frames leave faces and the state
   indicators visible.
-- Each package has its own CI job; the core's job runs the mock-provider UI
-  tests in Foundry.
+- Each package has its own CI job; the core's and each UI module's jobs run
+  the mock-provider tests in Foundry.
 
 ## 4. Local environment (WSL)
 
@@ -352,30 +476,39 @@ Rules the core enforces or documents for theme authors:
 ## 5. Architecture of the core
 
 ```
-┌──────────────────────────────────────────────────────────────┐
-│ Foundry integration + UI                                     │
-│  A/V client class (Foundry's plug-in point: game.webrtc)     │
-│  Camera dock (replaces CameraViews), voice panel, popovers,  │
-│  player list decorations, settings window, keybindings       │
+  UI modules (ui-dock, …)  ·  themes  ·  plugin contributions
+        │ state (subscribe)   ▲ commands   ▲ media.attach
+┌───────▼─────────────────────┴────────────┴───────────────────┐
+│ Extension points: state store, commands, media attachment,   │
+│  surfaces (Foundry's own UI when unfilled), contributions    │
+├──────────────────────────────────────────────────────────────┤
+│ Foundry integration                                          │
+│  A/V client class (Foundry's plug-in point: game.webrtc),    │
+│  settings storage, keybindings, GM socket commands           │
 ├──────────────────────────────────────────────────────────────┤
 │ Session (service-independent)                                │
 │  Connection state machine (connecting, connected, lost,      │
 │  retrying, left), participants ↔ Foundry users,              │
 │  mute/deafen/volume, speaking, stats, reconnect policy       │
 ├──────────────────────────────────────────────────────────────┤
-│ Local media pipeline (service-independent)                   │
+│ Local media pipeline + audio playback (service-independent)  │
 │  mic → audio effects → voice gate → provider                 │
 │  camera → video effects → provider                           │
+│  remote audio → per-player volume, deafen → output device    │
 ├──────────────────────────────────────────────────────────────┤
 │ Plugin registry: providers, audio and video effects,         │
-│  layouts, themes                                             │
+│  surfaces, contributions                                     │
 └──────────────────────────────────────────────────────────────┘
 ```
 
 Principles:
 
-- **The session owns the truth.** UI shows the session's state (including
-  "reconnecting", "blur starting", "open mic"), never assumes it.
+- **The session owns the truth.** UI modules show the state store
+  (including "reconnecting", "blur starting", "open mic") and change it
+  only through commands; they never assume a state or reach the provider.
+- **Small and stable API over features**: add to the core only what a
+  second module would otherwise duplicate; everything else starts in a
+  plugin and moves down only when that is proven.
 - **The media pipeline produces plain `MediaStreamTrack`s** (insertable
   streams, AudioWorklets), so any provider can publish the result. Keep
   **one** `AudioContext` for local processing; suspend it when unused.
@@ -538,22 +671,26 @@ pending — see the end of this document):
 Only Affid's own code (see §2), as starting points to adapt to the new
 structure:
 
-- UI kit → `core`: `src/ui/dom.ts`, `buttons.ts`, `controls.ts`, `Popover.ts`,
-  `Menu.ts`, `Avatar.ts`, `LevelMeter.ts`, our design tokens and CSS rules.
-- Dock → `core`: `src/ui/dock/*` (grid fitting, focus/compact layouts,
-  docked/floating/collapsed/Picture-in-Picture, tile windows, drag/resize).
-- Voice panel, connection details, user menu, player list decorations →
-  `core`: `src/ui/VoicePanel.ts`, `ConnectionPopover.ts`, `UserMenu.ts`,
-  `PlayersListDecorator.ts`.
+- UI building blocks → `kit`: `src/ui/dom.ts`, `Popover.ts`, `Menu.ts`,
+  `LevelMeter.ts`, the grid fitting, drag/resize and on-screen clamping
+  from `src/ui/dock/*`, `src/ui/dock/DockWindow.ts` (Picture-in-Picture).
+- Look → `ui-dock`: `src/ui/buttons.ts`, `controls.ts`, `Avatar.ts`, the
+  dock (`src/ui/dock/*`: focus/compact layouts,
+  docked/floating/collapsed/Picture-in-Picture, tile windows), voice panel,
+  connection details, user menu, player list decorations
+  (`src/ui/VoicePanel.ts`, `ConnectionPopover.ts`, `UserMenu.ts`,
+  `PlayersListDecorator.ts`), our design tokens and CSS rules.
 - Voice gate → `core`: `public/worklets/voice-activity-gate.js`,
   `src/VoiceActivityGate.ts`.
 - Per-user volume and mute/deafen → `core`: `src/UserAudioMixer.ts`,
   `src/VoiceControls.ts`.
 - Krisp → `livekit`: `src/KrispNoiseFilter.ts`.
 - Background effect → `fx-background`: `src/VideoBackground.ts`,
-  `src/MaskSmoother.ts`, `src/ui/videoBackgroundControl.ts`.
-- The settings window's design (sections, groups, wording) — rebuilt in the
-  core from scratch, since `src/LiveKitAVConfig.ts` is upstream-derived.
+  `src/MaskSmoother.ts`; its controls (`src/ui/videoBackgroundControl.ts`)
+  become declared contributions that `ui-dock` renders.
+- The settings window's design (sections, groups, wording) — rebuilt in
+  `ui-dock` from scratch, since `src/LiveKitAVConfig.ts` is
+  upstream-derived.
 
 Not worth carrying: the classic-UI paths (Foundry's own dock decorated), the
 `useExternalAV` web client, Tavern Patreon server support (unless wanted).
@@ -563,23 +700,29 @@ Not worth carrying: the classic-UI paths (Foundry's own dock decorated), the
 1. Repository: pnpm workspace, MIT `LICENSE`, `THIRD-PARTY-NOTICES.md`,
    Vite + TypeScript strict + ESLint + Prettier per package, language-file
    validation, CI, the Playwright harness, a local Foundry world.
-2. `api` + `core` with the **mock provider**: session state machine, plugin
-   registry and registration hook, settings rendering from schemas, dock,
-   voice panel, settings window, player list — tested without any server.
-3. `modular-av-livekit`: provider contract tests against a local LiveKit
+2. `api` + `core` with the **mock provider**, headless: session state
+   machine, state store and commands, media attachment, audio playback,
+   plugin registry and registration hook, schemas as Foundry settings,
+   surfaces and contributions — tested without any server or UI, working
+   with Foundry's own camera views.
+3. `kit` + `modular-av-ui-dock` (dock, voice panel, settings window, player
+   list) on the extension points only, and the UI contract tests. If
+   `ui-dock` needs something the API lacks, add it to the API rather than
+   working around it.
+4. `modular-av-livekit`: provider contract tests against a local LiveKit
    server (`livekit-server --dev`), then LiveKit Cloud; reconnect and
    network-impairment tests.
-4. Media pipeline in `core` (single AudioContext, voice gate, atomic swaps,
+5. Media pipeline in `core` (single AudioContext, voice gate, atomic swaps,
    fail-closed rules); `modular-av-fx-noise` (RNNoise default, Speex,
-   GTCRN), lazy.
-5. `modular-av-fx-background`: segmentation in a worker or at capped fps,
+   GTCRN), lazy, with its controls as contributions.
+6. `modular-av-fx-background`: segmentation in a worker or at capped fps,
    lazy, fail-closed, with measured budgets.
-6. `modular-av-p2p` (plain WebRTC, no server) — proves the provider API with a
+7. `modular-av-p2p` (plain WebRTC, no server) — proves the provider API with a
    very different service.
-7. `modular-av-jitsi` (lib-jitsi-meet), then `modular-av-embed`.
-8. The scattered layout, then a first theme module with tile frames (e.g.
+8. `modular-av-jitsi` (lib-jitsi-meet), then `modular-av-embed`.
+9. The scattered layout, then a first theme module with tile frames (e.g.
    vine leaves), to prove the layout and theming API.
-9. Docs, a migration note for players of the old module, releases per module.
+10. Docs, a migration note for players of the old module, releases per module.
 
 Performance budgets to hold (measure in the harness, GPU Chrome): no long task
 over 50 ms from the modules with effects off; a camera effect at its default
