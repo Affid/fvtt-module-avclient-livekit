@@ -207,7 +207,7 @@ export default class VoicePanel {
     const status =
       state === ConnectionState.Connected
         ? "connected"
-        : state === ConnectionState.Disconnected
+        : state === ConnectionState.Disconnected && !this.client.isReconnecting
           ? "disconnected"
           : state === ConnectionState.Connecting
             ? "connecting"
@@ -236,15 +236,25 @@ export default class VoicePanel {
         ? `${place} · ${this.pingMs.toString()} ms`
         : place;
 
+    // While reconnecting by itself, the button stops it
+    const reconnecting = this.client.isReconnecting;
+    const hangUp = connected || reconnecting;
     setIconButtonState(this.connectionButton, {
-      icon: connected ? "fa-phone-slash" : "fa-phone",
-      label: localize(connected ? "disconnect" : "connect"),
+      icon: hangUp ? "fa-phone-slash" : "fa-phone",
+      label: localize(
+        reconnecting
+          ? "stopReconnecting"
+          : connected
+            ? "disconnect"
+            : "connect",
+      ),
       disabled:
-        state === ConnectionState.Connecting ||
-        state === ConnectionState.Reconnecting,
+        !reconnecting &&
+        (state === ConnectionState.Connecting ||
+          state === ConnectionState.Reconnecting),
     });
-    this.connectionButton.classList.toggle("is-danger", connected);
-    this.connectionButton.classList.toggle("is-active", !connected);
+    this.connectionButton.classList.toggle("is-danger", hangUp);
+    this.connectionButton.classList.toggle("is-active", !hangUp);
 
     if (connected) {
       this.startPing();
@@ -296,6 +306,11 @@ export default class VoicePanel {
   }
 
   private toggleConnection(): void {
+    // While reconnecting by itself, the button stops it
+    if (this.client.isReconnecting) {
+      this.client.cancelReconnect();
+      return;
+    }
     const connected =
       this.client.liveKitRoom?.state === ConnectionState.Connected;
     this.connectionButton.disabled = true;

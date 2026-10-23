@@ -8,6 +8,7 @@ import { localize } from "../controls";
 import { el, icon, surface } from "../dom";
 import Menu, { type MenuItem } from "../Menu";
 import CameraTile, { type TileState, type UserContext } from "./CameraTile";
+import DockWindow, { supportsDockWindow } from "./DockWindow";
 import TileWindow from "./TileWindow";
 import {
   clampToViewport,
@@ -91,6 +92,14 @@ export default class LiveKitCameraViews extends CameraViews {
   private focusPicked = false;
   private followTimer?: number;
   private built = false;
+  /** The dock's own window, while its content is shown there */
+  private dockWindow?: DockWindow;
+  /** The element the content is in within the dock's own window */
+  private windowHost?: HTMLElement;
+  /** Where the content goes back to from the dock's own window */
+  private contentRoot?: HTMLElement;
+  /** The dock's content: header, body, voice panel slot, resize handle */
+  private contentNodes: HTMLElement[] = [];
 
   private readonly title = el("span", { className: "livekit-dock-count" });
   private readonly stage = el("div", { className: "livekit-dock-stage" });
@@ -109,6 +118,13 @@ export default class LiveKitCameraViews extends CameraViews {
     label: localize("dockView"),
     onClick: () => {
       this.viewMenu.toggle(this.layoutButton);
+    },
+  });
+  private readonly windowButton = iconButton({
+    icon: "fa-up-right-from-square",
+    label: localize("dockOpenWindow"),
+    onClick: () => {
+      void this.setWindowed(!this.isWindowed);
     },
   });
   private readonly collapseButton = iconButton({
@@ -153,8 +169,14 @@ export default class LiveKitCameraViews extends CameraViews {
     return this.floatingState.floating;
   }
 
+  /** The dock is shown in its own window */
+  get isWindowed(): boolean {
+    return !!this.dockWindow;
+  }
+
+  /** Collapsed to a slim bar; the dock's own window is never collapsed */
   private get collapsed(): boolean {
-    return game.webrtc?.settings.client.hideDock === true;
+    return game.webrtc?.settings.client.hideDock === true && !this.isWindowed;
   }
 
   private get dockPosition(): DockPosition {
@@ -168,12 +190,12 @@ export default class LiveKitCameraViews extends CameraViews {
    * @override
    */
   get isVertical(): boolean {
-    return !this.isFloating && super.isVertical;
+    return !this.isFloating && !this.isWindowed && super.isVertical;
   }
 
   /** @override */
   get isHorizontal(): boolean {
-    return !this.isFloating && super.isHorizontal;
+    return !this.isFloating && !this.isWindowed && super.isHorizontal;
   }
 
   /* -------------------------------------------- */
@@ -280,7 +302,11 @@ export default class LiveKitCameraViews extends CameraViews {
         }),
         el("div", {
           className: "livekit-dock-tools",
-          children: [this.layoutButton, this.collapseButton],
+          children: [
+            ...(supportsDockWindow() ? [this.windowButton] : []),
+            this.layoutButton,
+            this.collapseButton,
+          ],
         }),
       ],
     });
@@ -311,8 +337,8 @@ export default class LiveKitCameraViews extends CameraViews {
     header.addEventListener(
       "pointerdown",
       (event) => {
-        // Only a floating dock moves
-        if (!this.isFloating) {
+        // Only a floating dock moves; its own window is moved as a window
+        if (!this.isFloating || this.isWindowed) {
           event.stopImmediatePropagation();
         }
       },
@@ -321,7 +347,8 @@ export default class LiveKitCameraViews extends CameraViews {
 
     this.listObserver.observe(this.list);
 
-    content.replaceChildren(
+    this.contentRoot = content;
+    this.contentNodes = [
       header,
       el("div", {
         className: "livekit-dock-body",
@@ -329,7 +356,8 @@ export default class LiveKitCameraViews extends CameraViews {
       }),
       this.panelSlot,
       this.resizeHandle,
-    );
+    ];
+    content.replaceChildren(...this.contentNodes);
   }
 
   /**
@@ -412,7 +440,9 @@ export default class LiveKitCameraViews extends CameraViews {
       list.style.removeProperty("--lk-tile-width");
       return;
     }
-    const gap = parseFloat(getComputedStyle(list).columnGap) || 0;
+    // The list may be in the dock's own window
+    const view = list.ownerDocument.defaultView ?? window;
+    const gap = parseFloat(view.getComputedStyle(list).columnGap) || 0;
     const width = list.clientWidth;
     const height = list.clientHeight;
     if (!width || !height) {
@@ -624,6 +654,19 @@ export default class LiveKitCameraViews extends CameraViews {
       !(game.settings?.get(MODULE_NAME, "displayConnectionQuality") ?? true),
     );
 
+    // In its own window, the dock fills the window, and its place in
+    // Foundry's interface is left empty
+    const host = this.windowHost;
+    if (host) {
+      host.className = element.className;
+      host.classList.remove("horizontal", "is-collapsed");
+      host.classList.add("vertical", "is-floating", "is-windowed");
+      host.dataset.layout = element.dataset.layout;
+      host.dataset.placement = "window";
+      host.dataset.count = element.dataset.count;
+      element.hidden = true;
+    }
+
     const width = clampWidth(game.webrtc?.settings.client.dockWidth);
     if (floating) {
       const state = this.floatingState;
@@ -667,6 +710,13 @@ export default class LiveKitCameraViews extends CameraViews {
       icon: `fa-chevron-${collapsed ? expand : collapse}`,
       label: localize(collapsed ? "dockExpand" : "dockCollapse"),
       pressed: collapsed,
+    });
+    this.collapseButton.hidden = this.isWindowed;
+    setIconButtonState(this.windowButton, {
+      icon: this.isWindowed
+        ? "fa-arrow-right-to-bracket"
+        : "fa-up-right-from-square",
+      label: localize(this.isWindowed ? "dockCloseWindow" : "dockOpenWindow"),
     });
   }
 
@@ -727,6 +777,7 @@ export default class LiveKitCameraViews extends CameraViews {
   }
 
   async setPlacement(position: DockPosition | "float"): Promise<void> {
+    this.returnFromWindow();
     if (position === "float") {
       await this.saveFloating({ ...this.floatingState, floating: true });
     } else {
@@ -738,6 +789,67 @@ export default class LiveKitCameraViews extends CameraViews {
     }
     await this.render();
     resizeHotbar();
+  }
+
+  /**
+   * Show the dock in an always-on-top window of its own (Document
+   * Picture-in-Picture), or put it back in Foundry. Opening it must come from
+   * a user's action, e.g. a click. The dock's content moves into the window,
+   * so its videos keep playing; the voice panel stays in Foundry.
+   */
+  async setWindowed(windowed: boolean): Promise<void> {
+    if (!windowed) {
+      this.returnFromWindow();
+      return;
+    }
+    if (this.dockWindow || !this.contentRoot) {
+      return;
+    }
+    const state = this.floatingState;
+    const dockWindow = await DockWindow.open(
+      {
+        width: Math.max(state.width ?? 480, MIN_FLOATING.width),
+        height: Math.max(state.height ?? 360, MIN_FLOATING.height),
+      },
+      localize("dock"),
+      () => {
+        this.returnFromWindow();
+      },
+    ).catch((error: unknown) => {
+      log.error("Unable to open the dock's own window:", error);
+      return undefined;
+    });
+    if (!dockWindow) {
+      return;
+    }
+    const host = el("div", { attrs: { id: "camera-views" } });
+    dockWindow.document.body.append(host);
+    host.append(...this.contentNodes);
+    this.dockWindow = dockWindow;
+    this.windowHost = host;
+    dockWindow.window.addEventListener("resize", () => {
+      this.fitGrid();
+    });
+    this.viewMenu.close();
+    await this.render();
+    resizeHotbar();
+  }
+
+  /**
+   * Put the dock's content back in Foundry and close its own window, if it
+   * is open. Closing the window (e.g. with its close button) comes here too.
+   */
+  private returnFromWindow(): void {
+    const dockWindow = this.dockWindow;
+    if (!dockWindow) {
+      return;
+    }
+    this.dockWindow = undefined;
+    this.windowHost = undefined;
+    this.viewMenu.close();
+    this.contentRoot?.append(...this.contentNodes);
+    dockWindow.close();
+    void this.render().then(resizeHotbar);
   }
 
   async setCollapsed(collapsed: boolean): Promise<void> {
@@ -771,6 +883,7 @@ export default class LiveKitCameraViews extends CameraViews {
   canPictureInPicture(userId: string): boolean {
     const tile = this.tiles.get(userId);
     return (
+      !this.isWindowed &&
       document.pictureInPictureEnabled &&
       !!tile?.video.srcObject &&
       tile.element.classList.contains("is-video")
@@ -799,7 +912,11 @@ export default class LiveKitCameraViews extends CameraViews {
 
   private viewMenuItems(): MenuItem[] {
     const layout = this.layout;
-    const placement = this.isFloating ? "float" : this.dockPosition;
+    const placement = this.isWindowed
+      ? "window"
+      : this.isFloating
+        ? "float"
+        : this.dockPosition;
     return [
       { type: "header", label: localize("dockLayoutTitle") },
       ...LAYOUTS.map(
@@ -845,6 +962,16 @@ export default class LiveKitCameraViews extends CameraViews {
           onSelect: () => this.setPlacement(position),
         }),
       ),
+      ...(supportsDockWindow()
+        ? [
+            {
+              type: "radio",
+              label: localize("dockWindow"),
+              checked: placement === "window",
+              onSelect: () => this.setWindowed(true),
+            } satisfies MenuItem,
+          ]
+        : []),
     ];
   }
 }

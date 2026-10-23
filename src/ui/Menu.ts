@@ -111,7 +111,9 @@ export default class Menu {
       return;
     }
     const items = this.focusableItems();
-    const focused = items.findIndex((item) => item === document.activeElement);
+    const focused = items.findIndex(
+      (item) => item === this.element.ownerDocument.activeElement,
+    );
     this.render();
     this.popover.reposition();
     if (focused >= 0) {
@@ -219,7 +221,7 @@ export default class Menu {
     if (!items.length) {
       return;
     }
-    const focused = document.activeElement;
+    const focused = this.element.ownerDocument.activeElement;
     // Sliders keep Home and End (and left/right) for their value
     if (
       focused instanceof HTMLInputElement &&

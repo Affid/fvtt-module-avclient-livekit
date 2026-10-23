@@ -7,10 +7,15 @@ const ANCHOR_GAP = 6;
  * A floating popup anchored to an element or a point. It closes when clicking
  * outside of it or pressing Escape, and removes its element when closed.
  * Focus returns to the anchor when the popover closes with focus inside it.
+ *
+ * It opens in the document of the element it belongs to, which may be the
+ * camera dock's own window rather than Foundry's.
  */
 export default class Popover {
   readonly element: HTMLElement;
   private anchor: HTMLElement | null = null;
+  /** The document the popover is open in */
+  private doc: Document = document;
   private expandedControl: HTMLElement | null = null;
   private readonly onPointerDown = (event: PointerEvent) => {
     const target = event.target;
@@ -63,7 +68,7 @@ export default class Popover {
   openAt(anchor: HTMLElement, control: HTMLElement = anchor): void {
     this.anchor = anchor;
     this.setExpandedControl(control);
-    this.show();
+    this.show(anchor.ownerDocument);
     this.reposition();
   }
 
@@ -75,7 +80,7 @@ export default class Popover {
   openAtPoint(x: number, y: number, control?: HTMLElement): void {
     this.anchor = null;
     this.setExpandedControl(control ?? null);
-    this.show();
+    this.show(control?.ownerDocument ?? document);
     const { width, height } = this.element.getBoundingClientRect();
     this.place(x, y, width, height);
   }
@@ -91,7 +96,7 @@ export default class Popover {
     const anchorRect = this.anchor.getBoundingClientRect();
     const roomAbove = anchorRect.top - VIEWPORT_MARGIN - ANCHOR_GAP;
     const roomBelow =
-      window.innerHeight - anchorRect.bottom - VIEWPORT_MARGIN - ANCHOR_GAP;
+      this.viewport.height - anchorRect.bottom - VIEWPORT_MARGIN - ANCHOR_GAP;
 
     // Open on the side with room, and limit the height to that room (the
     // content scrolls) rather than covering the anchor
@@ -114,9 +119,9 @@ export default class Popover {
     if (!this.isOpen) {
       return;
     }
-    const hadFocus = this.element.contains(document.activeElement);
-    document.removeEventListener("pointerdown", this.onPointerDown, true);
-    document.removeEventListener("keydown", this.onKeyDown, true);
+    const hadFocus = this.element.contains(this.doc.activeElement);
+    this.doc.removeEventListener("pointerdown", this.onPointerDown, true);
+    this.doc.removeEventListener("keydown", this.onKeyDown, true);
     this.element.remove();
     const control = this.expandedControl;
     this.setExpandedControl(null);
@@ -137,24 +142,35 @@ export default class Popover {
     }
   }
 
-  private show(): void {
+  private show(doc: Document): void {
+    if (this.isOpen && doc !== this.doc) {
+      this.close();
+    }
     if (!this.isOpen) {
-      document.body.append(this.element);
-      document.addEventListener("pointerdown", this.onPointerDown, true);
-      document.addEventListener("keydown", this.onKeyDown, true);
+      this.doc = doc;
+      doc.body.append(this.element);
+      doc.addEventListener("pointerdown", this.onPointerDown, true);
+      doc.addEventListener("keydown", this.onKeyDown, true);
     }
   }
 
+  /** The size of the window the popover is open in */
+  private get viewport(): { width: number; height: number } {
+    const view = this.doc.defaultView ?? window;
+    return { width: view.innerWidth, height: view.innerHeight };
+  }
+
   private place(left: number, top: number, width: number, height: number) {
+    const viewport = this.viewport;
     this.element.style.left = `${clamp(
       left,
       VIEWPORT_MARGIN,
-      window.innerWidth - width - VIEWPORT_MARGIN,
+      viewport.width - width - VIEWPORT_MARGIN,
     ).toString()}px`;
     this.element.style.top = `${clamp(
       top,
       VIEWPORT_MARGIN,
-      window.innerHeight - height - VIEWPORT_MARGIN,
+      viewport.height - height - VIEWPORT_MARGIN,
     ).toString()}px`;
   }
 }

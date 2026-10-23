@@ -82,6 +82,23 @@ const log = new Logger();
 
 const NO_AUDIO_PROCESSOR = "none";
 
+/**
+ * How long to wait before each attempt to reconnect after the connection was
+ * lost; the last one repeats for as long as the page is open
+ */
+const RECONNECT_DELAYS_MS = [1000, 3000, 5000, 10000, 20000, 30000];
+/** After this many failed attempts, say why they fail */
+const RECONNECT_ATTEMPTS_BEFORE_ERROR = 5;
+/** Disconnect reasons that mean the user should stay disconnected */
+const FINAL_DISCONNECT_REASONS = new Set<DisconnectReason>([
+  DisconnectReason.CLIENT_INITIATED,
+  DisconnectReason.DUPLICATE_IDENTITY,
+  DisconnectReason.PARTICIPANT_REMOVED,
+  DisconnectReason.ROOM_DELETED,
+  DisconnectReason.ROOM_CLOSED,
+  DisconnectReason.USER_REJECTED,
+]);
+
 /** The ID of the hidden element holding remote users' audio elements */
 const AUDIO_CONTAINER_ID = "livekit-audio";
 
@@ -179,6 +196,11 @@ export default class LiveKitClient {
   screenTracks: LocalTrack[] = [];
   useExternalAV = false;
   videoTrack: LocalVideoTrack | null = null;
+  /**
+   * Reconnecting after the connection was lost, like Discord: the attempts
+   * so far, the timer of the next one, and whether one is running
+   */
+  private autoReconnect?: { attempt: number; timer?: number; running: boolean };
   /** The camera background effect failed to start; video is sent without it */
   videoBackgroundFailed = false;
   /** The background image that couldn't be loaded; blur is used instead */
@@ -286,6 +308,7 @@ export default class LiveKitClient {
 
     connectButton.addEventListener("click", () => {
       connectButton.classList.toggle("disabled", true);
+      this.cancelReconnect();
       this.avMaster.connect().catch((error: unknown) => {
         log.error("Error connecting:", error);
       });
@@ -294,6 +317,7 @@ export default class LiveKitClient {
 
     disconnectButton.addEventListener("click", () => {
       disconnectButton.classList.toggle("disabled", true);
+      this.cancelReconnect();
       this.avMaster
         .disconnect()
         .then(() => {
@@ -415,7 +439,8 @@ export default class LiveKitClient {
 
   /**
    * Check (once) whether this browser supports the Krisp noise filter. This
-   * loads the filter, so it is only done once connected to LiveKit Cloud.
+   * loads the filter, so it is only done once Krisp is chosen and connected
+   * to LiveKit Cloud.
    */
   private async checkKrispSupport(): Promise<void> {
     if (this.krispSupported !== undefined) {
@@ -1314,6 +1339,15 @@ export default class LiveKitClient {
         return;
       }
 
+      // Krisp is a 6 MB download: only load it (to check that this browser
+      // supports it) once it is chosen and could run
+      if (
+        this.getSelectedNoiseModel() === "krisp" &&
+        isLiveKitCloud(this.liveKitRoom, this.liveKitServerAddress)
+      ) {
+        await this.checkKrispSupport();
+      }
+
       // Remove a processor that is about to be replaced before restarting the
       // capture, so it isn't needlessly restarted along with the microphone
       const key = getAudioProcessorKey(this.getAudioProcessingConfig());
@@ -1470,9 +1504,9 @@ export default class LiveKitClient {
       return { mode: "none" };
     }
     const quality =
-      game.settings?.get(MODULE_NAME, "videoBackgroundQuality") === "standard"
-        ? "standard"
-        : "high";
+      game.settings?.get(MODULE_NAME, "videoBackgroundQuality") === "high"
+        ? "high"
+        : "standard";
     if (mode === "image") {
       const url = videoBackgroundImageUrl(
         game.settings?.get(MODULE_NAME, "videoBackgroundImage") ?? "",
@@ -1598,6 +1632,10 @@ export default class LiveKitClient {
   }
 
   async onConnected(): Promise<void> {
+    // Connected some other way than by reconnecting, e.g. by the user
+    if (!this.autoReconnect?.running) {
+      this.cancelReconnect();
+    }
     log.debug("Client connected");
 
     // Set up local participant callbacks
@@ -1625,9 +1663,6 @@ export default class LiveKitClient {
 
     // Now that the server is known, switch to Krisp if it was selected and
     // this is LiveKit Cloud, or away from it if this server isn't
-    if (isLiveKitCloud(this.liveKitRoom, this.liveKitServerAddress)) {
-      await this.checkKrispSupport();
-    }
     await this.refreshAudioProcessing();
 
     // Let everyone know if we are deafened
@@ -1663,12 +1698,26 @@ export default class LiveKitClient {
 
   onDisconnected(reason?: DisconnectReason): void {
     log.debug("Client disconnected", { reason });
-    let disconnectWarning =
-      game.i18n?.localize(`${LANG_NAME}.onDisconnected`) ?? "onDisconnected";
-    if (reason) {
-      disconnectWarning += `: ${DisconnectReason[reason]}`;
+    // Unless the disconnection was meant (or the user joined elsewhere, or
+    // was removed), keep trying to reconnect, as LiveKit only retries for a
+    // short while
+    const final = reason !== undefined && FINAL_DISCONNECT_REASONS.has(reason);
+    if (final) {
+      this.cancelReconnect();
+      if (reason !== DisconnectReason.CLIENT_INITIATED) {
+        ui.notifications?.warn(
+          `${game.i18n?.localize(`${LANG_NAME}.onDisconnected`) ?? "onDisconnected"}: ${DisconnectReason[reason]}`,
+        );
+      }
+    } else if (!this.autoReconnect) {
+      log.warn(
+        "Connection lost; reconnecting",
+        reason === undefined ? "" : DisconnectReason[reason],
+      );
+      ui.notifications?.warn(`${LANG_NAME}.voiceReconnecting`, {
+        localize: true,
+      });
     }
-    ui.notifications?.warn(disconnectWarning);
 
     // Clear the participant map. LiveKit tells nothing more about the other
     // participants, so nobody is speaking any more.
@@ -1685,7 +1734,104 @@ export default class LiveKitClient {
 
     this.connectionState = ConnectionState.Disconnected;
 
-    // TODO: Add some incremental back-off reconnect logic here
+    if (!final) {
+      this.reconnectLater();
+    }
+    this.voicePanelInstance?.update();
+  }
+
+  /** Trying to reconnect after the connection was lost */
+  get isReconnecting(): boolean {
+    return !!this.autoReconnect;
+  }
+
+  /**
+   * An automatic attempt to reconnect is running, whose errors aren't shown
+   * (but for every so many failed attempts)
+   */
+  get isQuietReconnectAttempt(): boolean {
+    return (
+      !!this.autoReconnect?.running &&
+      this.autoReconnect.attempt % RECONNECT_ATTEMPTS_BEFORE_ERROR !== 0
+    );
+  }
+
+  /**
+   * Schedule the next attempt to reconnect, waiting longer after each failed
+   * one. Coming back online tries at once.
+   */
+  private reconnectLater(): void {
+    const state = (this.autoReconnect ??= { attempt: 0, running: false });
+    if (state.running || state.timer !== undefined) {
+      return;
+    }
+    const delay =
+      RECONNECT_DELAYS_MS[
+        Math.min(state.attempt, RECONNECT_DELAYS_MS.length - 1)
+      ];
+    state.timer = window.setTimeout(() => {
+      void this.reconnectNow();
+    }, delay);
+    window.addEventListener("online", this.onBrowserOnline);
+  }
+
+  private readonly onBrowserOnline = () => {
+    void this.reconnectNow();
+  };
+
+  private async reconnectNow(): Promise<void> {
+    const state = this.autoReconnect;
+    if (!state || state.running) {
+      return;
+    }
+    // Nothing to reconnect to once A/V is turned off for the world
+    if (
+      this.settings.get("world", "mode") ===
+      foundry.av.AVSettings.AV_MODES.DISABLED
+    ) {
+      this.cancelReconnect();
+      return;
+    }
+    window.clearTimeout(state.timer);
+    state.timer = undefined;
+    state.running = true;
+    state.attempt += 1;
+    log.info("Reconnecting, attempt", state.attempt);
+    this.voicePanelInstance?.update();
+    let connected = false;
+    try {
+      connected = await this.avMaster.connect();
+    } catch (error: unknown) {
+      log.warn("Reconnect attempt failed:", error);
+    }
+    if (this.autoReconnect !== state) {
+      // Cancelled meanwhile, e.g. the user disconnected
+      return;
+    }
+    state.running = false;
+    if (connected && this.liveKitRoom?.state === ConnectionState.Connected) {
+      this.cancelReconnect();
+      ui.notifications?.info(`${LANG_NAME}.voiceReconnected`, {
+        localize: true,
+      });
+    } else {
+      this.reconnectLater();
+    }
+  }
+
+  /**
+   * Stop trying to reconnect, e.g. because the user connected or
+   * disconnected themselves.
+   */
+  cancelReconnect(): void {
+    const state = this.autoReconnect;
+    if (!state) {
+      return;
+    }
+    window.clearTimeout(state.timer);
+    this.autoReconnect = undefined;
+    window.removeEventListener("online", this.onBrowserOnline);
+    this.voicePanelInstance?.update();
   }
 
   onGetUserContextOptions(
@@ -1846,6 +1992,7 @@ export default class LiveKitClient {
       case "connect":
         // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
         if (game.users?.get(userId)?.isGM) {
+          this.cancelReconnect();
           this.avMaster.connect().catch((error: unknown) => {
             log.error("Error connecting:", error);
           });
@@ -1856,6 +2003,7 @@ export default class LiveKitClient {
       case "disconnect":
         // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
         if (game.users?.get(userId)?.isGM) {
+          this.cancelReconnect();
           this.avMaster
             .disconnect()
             .then(() => {
